@@ -7,6 +7,25 @@
 
 A minimal CLI ticket management system designed for AI agents. This is a Go port of [wedow/ticket](https://github.com/wedow/ticket).
 
+## Quick Demo
+
+```bash
+$ tk create "Fix login bug" -t bug -p 1 --tags auth,urgent
+tic-a1b2
+
+$ tk list
+tic-a1b2 [P1][open] - Fix login bug
+
+$ tk start a1b2
+Claimed tic-a1b2 -> in_progress
+
+$ tk add-note a1b2 "Root cause: session timeout"
+Added note to tic-a1b2
+
+$ tk close a1b2
+Updated tic-a1b2 -> closed
+```
+
 ## Overview
 
 `tk` stores issues as markdown files with YAML frontmatter in a `.tickets/` directory, enabling easy content searching without bloating context windows. Based on Unix philosophy principles, it provides:
