@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"os"
 	"runtime"
 
 	"github.com/creativeprojects/go-selfupdate"
@@ -22,7 +23,9 @@ func init() {
 }
 
 func doUpdate(ctx context.Context) error {
-	source, err := selfupdate.NewGitHubSource(selfupdate.GitHubConfig{})
+	source, err := selfupdate.NewGitHubSource(selfupdate.GitHubConfig{
+		APIToken: os.Getenv("GITHUB_TOKEN"),
+	})
 	if err != nil {
 		return fmt.Errorf("failed to create GitHub source: %w", err)
 	}
