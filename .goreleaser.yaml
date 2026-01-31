@@ -53,3 +53,20 @@ release:
   draft: false
   prerelease: auto
   name_template: "v{{.Version}}"
+
+brews:
+  - name: tk
+    repository:
+      owner: radutopala
+      name: homebrew-tap
+    directory: Formula
+    homepage: https://github.com/radutopala/ticket
+    description: Minimal CLI ticket management system for AI agents
+    license: MIT
+    commit_author:
+      name: Radu Topala
+      email: radu.topala@trisoft.ro
+    install: |
+      bin.install "tk"
+    test: |
+      system "#{bin}/tk", "--help"

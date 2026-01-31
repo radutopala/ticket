@@ -13,6 +13,12 @@ A minimal CLI ticket management system designed for AI agents. This is a Go port
 
 ## Installation
 
+### Homebrew (macOS/Linux)
+
+```bash
+brew install radutopala/tap/tk
+```
+
 ### Go Install
 
 Requires Go 1.25+:
@@ -29,7 +35,7 @@ cd ticket
 make install
 ```
 
-Both methods install `tk` to your `$GOPATH/bin`.
+Both Go methods install `tk` to your `$GOPATH/bin`.
 
 ### Build Locally
 
