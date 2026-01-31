@@ -11,11 +11,28 @@ import (
 	"github.com/radutopala/ticket/internal/domain"
 )
 
-var listFlags struct {
-	status   string
-	assignee string
-	tag      string
+// FilterOptions holds common filtering options for list commands.
+type FilterOptions struct {
+	Status   string
+	Assignee string
+	Tag      string
 }
+
+// Matches checks if a ticket matches the filter options.
+func (f FilterOptions) Matches(t *domain.Ticket) bool {
+	if f.Status != "" && string(t.Status) != f.Status {
+		return false
+	}
+	if f.Assignee != "" && t.Assignee != f.Assignee {
+		return false
+	}
+	if f.Tag != "" && !hasTag(t.Tags, f.Tag) {
+		return false
+	}
+	return true
+}
+
+var listFlags FilterOptions
 
 var listCmd = &cobra.Command{
 	Use:     "list",
@@ -28,7 +45,7 @@ var listCmd = &cobra.Command{
 			return err
 		}
 
-		filtered := filterTickets(tickets, listFlags.status, listFlags.assignee, listFlags.tag)
+		filtered := filterTickets(tickets, listFlags)
 		sortTicketsByPriority(filtered)
 
 		return runWithPager(func(w io.Writer) error {
@@ -75,12 +92,8 @@ var readyCmd = &cobra.Command{
 				}
 			}
 
-			if !hasBlockingDeps {
-				if listFlags.assignee == "" || t.Assignee == listFlags.assignee {
-					if listFlags.tag == "" || hasTag(t.Tags, listFlags.tag) {
-						ready = append(ready, t)
-					}
-				}
+			if !hasBlockingDeps && listFlags.Matches(t) {
+				ready = append(ready, t)
 			}
 		}
 
@@ -130,12 +143,8 @@ var blockedCmd = &cobra.Command{
 				}
 			}
 
-			if hasBlockingDeps {
-				if listFlags.assignee == "" || t.Assignee == listFlags.assignee {
-					if listFlags.tag == "" || hasTag(t.Tags, listFlags.tag) {
-						blocked = append(blocked, t)
-					}
-				}
+			if hasBlockingDeps && listFlags.Matches(t) {
+				blocked = append(blocked, t)
 			}
 		}
 
@@ -171,10 +180,8 @@ var closedCmd = &cobra.Command{
 			if t.Status != domain.StatusClosed {
 				continue
 			}
-			if listFlags.assignee == "" || t.Assignee == listFlags.assignee {
-				if listFlags.tag == "" || hasTag(t.Tags, listFlags.tag) {
-					closed = append(closed, t)
-				}
+			if listFlags.Matches(t) {
+				closed = append(closed, t)
 			}
 		}
 
@@ -199,19 +206,12 @@ var closedCmd = &cobra.Command{
 	},
 }
 
-func filterTickets(tickets []*domain.Ticket, status, assignee, tag string) []*domain.Ticket {
+func filterTickets(tickets []*domain.Ticket, opts FilterOptions) []*domain.Ticket {
 	var result []*domain.Ticket
 	for _, t := range tickets {
-		if status != "" && string(t.Status) != status {
-			continue
+		if opts.Matches(t) {
+			result = append(result, t)
 		}
-		if assignee != "" && t.Assignee != assignee {
-			continue
-		}
-		if tag != "" && !hasTag(t.Tags, tag) {
-			continue
-		}
-		result = append(result, t)
 	}
 	return result
 }
@@ -235,17 +235,17 @@ func sortTicketsByPriority(tickets []*domain.Ticket) {
 }
 
 func init() {
-	listCmd.Flags().StringVar(&listFlags.status, "status", "", "Filter by status (open|in_progress|closed)")
-	listCmd.Flags().StringVarP(&listFlags.assignee, "assignee", "a", "", "Filter by assignee")
-	listCmd.Flags().StringVarP(&listFlags.tag, "tag", "T", "", "Filter by tag")
+	listCmd.Flags().StringVar(&listFlags.Status, "status", "", "Filter by status (open|in_progress|closed)")
+	listCmd.Flags().StringVarP(&listFlags.Assignee, "assignee", "a", "", "Filter by assignee")
+	listCmd.Flags().StringVarP(&listFlags.Tag, "tag", "T", "", "Filter by tag")
 
-	readyCmd.Flags().StringVarP(&listFlags.assignee, "assignee", "a", "", "Filter by assignee")
-	readyCmd.Flags().StringVarP(&listFlags.tag, "tag", "T", "", "Filter by tag")
+	readyCmd.Flags().StringVarP(&listFlags.Assignee, "assignee", "a", "", "Filter by assignee")
+	readyCmd.Flags().StringVarP(&listFlags.Tag, "tag", "T", "", "Filter by tag")
 
-	blockedCmd.Flags().StringVarP(&listFlags.assignee, "assignee", "a", "", "Filter by assignee")
-	blockedCmd.Flags().StringVarP(&listFlags.tag, "tag", "T", "", "Filter by tag")
+	blockedCmd.Flags().StringVarP(&listFlags.Assignee, "assignee", "a", "", "Filter by assignee")
+	blockedCmd.Flags().StringVarP(&listFlags.Tag, "tag", "T", "", "Filter by tag")
 
 	closedCmd.Flags().IntVar(&closedFlags.limit, "limit", 20, "Limit number of results")
-	closedCmd.Flags().StringVarP(&listFlags.assignee, "assignee", "a", "", "Filter by assignee")
-	closedCmd.Flags().StringVarP(&listFlags.tag, "tag", "T", "", "Filter by tag")
+	closedCmd.Flags().StringVarP(&listFlags.Assignee, "assignee", "a", "", "Filter by assignee")
+	closedCmd.Flags().StringVarP(&listFlags.Tag, "tag", "T", "", "Filter by tag")
 }

@@ -38,9 +38,9 @@ func (s *CmdSuite) SetupTest() {
 	require.NoError(s.T(), store.EnsureDir())
 
 	// Reset all command flags to their default values
-	listFlags.status = ""
-	listFlags.assignee = ""
-	listFlags.tag = ""
+	listFlags.Status = ""
+	listFlags.Assignee = ""
+	listFlags.Tag = ""
 	closedFlags.limit = 20
 	createFlags.description = ""
 	createFlags.design = ""
@@ -755,4 +755,73 @@ func (s *CmdSuite) TestCreateWithExplicitAssigneeOverridesGitUserName() {
 	ticket, err := store.Read(id)
 	require.NoError(s.T(), err)
 	require.Equal(s.T(), "explicit-user", ticket.Assignee)
+}
+
+func (s *CmdSuite) TestCreateWithInvalidPriorityTooLow() {
+	_, err := s.executeCommand("create", "Test Ticket", "--priority", "-1")
+
+	require.Error(s.T(), err)
+	require.Contains(s.T(), err.Error(), "invalid priority")
+	require.Contains(s.T(), err.Error(), "must be between 0 and 4")
+}
+
+func (s *CmdSuite) TestCreateWithInvalidPriorityTooHigh() {
+	_, err := s.executeCommand("create", "Test Ticket", "--priority", "5")
+
+	require.Error(s.T(), err)
+	require.Contains(s.T(), err.Error(), "invalid priority")
+	require.Contains(s.T(), err.Error(), "must be between 0 and 4")
+}
+
+func (s *CmdSuite) TestCreateWithValidPriorityBoundaries() {
+	// Test priority 0 (lowest valid value, highest priority)
+	output, err := s.executeCommand("create", "Priority 0 Ticket", "--priority", "0")
+	require.NoError(s.T(), err)
+	id := strings.TrimSpace(output)
+	ticket, err := store.Read(id)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 0, ticket.Priority)
+
+	// Test priority 4 (highest valid value, lowest priority)
+	output, err = s.executeCommand("create", "Priority 4 Ticket", "--priority", "4")
+	require.NoError(s.T(), err)
+	id = strings.TrimSpace(output)
+	ticket, err = store.Read(id)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 4, ticket.Priority)
+}
+
+func (s *CmdSuite) TestCreateWithNonExistentParent() {
+	_, err := s.executeCommand("create", "Child Ticket", "--parent", "nonexistent-parent")
+
+	require.Error(s.T(), err)
+	require.Contains(s.T(), err.Error(), "parent ticket not found")
+}
+
+func (s *CmdSuite) TestCreateWithValidParent() {
+	// Create a parent ticket first
+	s.createTestTicket("tic-parent-create", domain.StatusOpen, "Parent Ticket")
+
+	// Create a child ticket with valid parent
+	output, err := s.executeCommand("create", "Child Ticket", "--parent", "tic-parent-create")
+
+	require.NoError(s.T(), err)
+	id := strings.TrimSpace(output)
+	ticket, err := store.Read(id)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), "tic-parent-create", ticket.Parent)
+}
+
+func (s *CmdSuite) TestCreateWithValidParentPartialID() {
+	// Create a parent ticket first
+	s.createTestTicket("tic-parent-partial", domain.StatusOpen, "Parent Ticket")
+
+	// Create a child ticket using partial parent ID
+	output, err := s.executeCommand("create", "Child Ticket", "--parent", "parent-partial")
+
+	require.NoError(s.T(), err)
+	id := strings.TrimSpace(output)
+	ticket, err := store.Read(id)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), "tic-parent-partial", ticket.Parent)
 }

@@ -81,15 +81,7 @@ var unlinkCmd = &cobra.Command{
 			return err
 		}
 
-		found1 := false
-		newLinks1 := make([]string, 0, len(ticket1.Links))
-		for _, link := range ticket1.Links {
-			if link == id2 {
-				found1 = true
-			} else {
-				newLinks1 = append(newLinks1, link)
-			}
-		}
+		newLinks1, found1 := removeFromSlice(ticket1.Links, id2)
 		ticket1.Links = newLinks1
 
 		// Remove link from second ticket
@@ -98,15 +90,7 @@ var unlinkCmd = &cobra.Command{
 			return err
 		}
 
-		found2 := false
-		newLinks2 := make([]string, 0, len(ticket2.Links))
-		for _, link := range ticket2.Links {
-			if link == id1 {
-				found2 = true
-			} else {
-				newLinks2 = append(newLinks2, link)
-			}
-		}
+		newLinks2, found2 := removeFromSlice(ticket2.Links, id1)
 		ticket2.Links = newLinks2
 
 		if !found1 && !found2 {

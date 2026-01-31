@@ -26,6 +26,18 @@ var showCmd = &cobra.Command{
 			return err
 		}
 
+		// Load all tickets once for parent lookup and relationships
+		allTickets, err := store.List()
+		if err != nil {
+			return fmt.Errorf("failed to list tickets: %w", err)
+		}
+
+		// Build ticket map for O(1) lookups
+		ticketMap := make(map[string]*domain.Ticket)
+		for _, t := range allTickets {
+			ticketMap[t.ID] = t
+		}
+
 		// Render the ticket content
 		content, err := ticket.Render()
 		if err != nil {
@@ -41,9 +53,9 @@ var showCmd = &cobra.Command{
 			for i, line := range lines {
 				result = append(result, line)
 				if strings.HasPrefix(line, "links:") && i > 0 {
-					// Try to get parent title
+					// Try to get parent title from pre-loaded map
 					parentTitle := ""
-					if parentTicket, err := store.Read(ticket.Parent); err == nil {
+					if parentTicket, ok := ticketMap[ticket.Parent]; ok {
 						parentTitle = parentTicket.Title
 					}
 					if parentTitle != "" {
@@ -56,11 +68,8 @@ var showCmd = &cobra.Command{
 			output = strings.Join(result, "\n")
 		}
 
-		// Get relationships
-		relationships, err := getTicketRelationships(id, ticket)
-		if err != nil {
-			return fmt.Errorf("failed to get relationships: %w", err)
-		}
+		// Get relationships using pre-loaded tickets
+		relationships := getTicketRelationships(id, ticket, allTickets)
 
 		return runWithPager(func(w io.Writer) error {
 			if _, err := fmt.Fprint(w, output); err != nil {
@@ -80,12 +89,7 @@ var showCmd = &cobra.Command{
 }
 
 // getTicketRelationships returns a string with the ticket's relationships.
-func getTicketRelationships(id string, ticket *domain.Ticket) (string, error) {
-	allTickets, err := store.List()
-	if err != nil {
-		return "", err
-	}
-
+func getTicketRelationships(id string, ticket *domain.Ticket, allTickets []*domain.Ticket) string {
 	var blocking []string
 	var children []string
 
@@ -128,8 +132,8 @@ func getTicketRelationships(id string, ticket *domain.Ticket) (string, error) {
 	}
 
 	if len(lines) == 0 {
-		return "", nil
+		return ""
 	}
 
-	return strings.Join(lines, "\n") + "\n", nil
+	return strings.Join(lines, "\n") + "\n"
 }

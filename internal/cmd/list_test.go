@@ -127,7 +127,12 @@ func (s *ListSuite) TestFilterTickets() {
 
 	for _, tt := range tests {
 		s.Run(tt.name, func() {
-			result := filterTickets(tickets, tt.status, tt.assignee, tt.tag)
+			opts := FilterOptions{
+				Status:   tt.status,
+				Assignee: tt.assignee,
+				Tag:      tt.tag,
+			}
+			result := filterTickets(tickets, opts)
 
 			var ids []string
 			for _, t := range result {

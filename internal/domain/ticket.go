@@ -194,7 +194,11 @@ func (t *Ticket) ParseMarkdownBody(content string) {
 		text := strings.TrimSpace(sectionContent.String())
 		switch currentSection {
 		case "title":
-			t.Title = text
+			// Only set title from section content if we don't already have one
+			// (title is set directly when we see "# " prefix)
+			if text != "" {
+				t.Title = text
+			}
 		case "description":
 			t.Description = text
 		case "design":

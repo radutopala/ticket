@@ -30,6 +30,20 @@ var createCmd = &cobra.Command{
 	Long:  `Create a new ticket with the specified title and options.`,
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// Validate priority (0-4)
+		if createFlags.priority < 0 || createFlags.priority > 4 {
+			return fmt.Errorf("invalid priority %d: must be between 0 and 4 (0=highest)", createFlags.priority)
+		}
+
+		// Validate parent exists if specified
+		if createFlags.parent != "" {
+			resolvedParent, err := store.ResolveID(createFlags.parent)
+			if err != nil {
+				return fmt.Errorf("parent ticket not found: %s", createFlags.parent)
+			}
+			createFlags.parent = resolvedParent
+		}
+
 		id, err := storage.GenerateID()
 		if err != nil {
 			return fmt.Errorf("failed to generate ID: %w", err)

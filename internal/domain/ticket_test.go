@@ -240,3 +240,39 @@ func (s *TicketSuite) TestRoundTrip() {
 	require.Equal(s.T(), original.Links, parsed.Links)
 	require.Equal(s.T(), original.Title, parsed.Title)
 }
+
+func TestTitlePreservationAfterStatusChange(t *testing.T) {
+	content := `---
+id: test-1234
+status: open
+type: task
+priority: 2
+created: 2026-01-31T17:10:46.21915Z
+---
+# My Test Title
+
+## Section
+- item
+`
+	ticket, err := Parse([]byte(content))
+	require.NoError(t, err)
+	
+	t.Logf("Title after parse: %q", ticket.Title)
+	t.Logf("Description after parse: %q", ticket.Description)
+	
+	require.Equal(t, "My Test Title", ticket.Title, "Title should be preserved after parse")
+	
+	// Simulate status change
+	ticket.Status = StatusInProgress
+	
+	rendered, err := ticket.Render()
+	require.NoError(t, err)
+	
+	t.Logf("Rendered:\n%s", rendered)
+	
+	// Parse again
+	ticket2, err := Parse(rendered)
+	require.NoError(t, err)
+	
+	require.Equal(t, "My Test Title", ticket2.Title, "Title should be preserved after render and re-parse")
+}

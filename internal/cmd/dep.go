@@ -84,16 +84,7 @@ var depRemoveCmd = &cobra.Command{
 			return err
 		}
 
-		found := false
-		newDeps := make([]string, 0, len(ticket.Deps))
-		for _, d := range ticket.Deps {
-			if d == depID {
-				found = true
-			} else {
-				newDeps = append(newDeps, d)
-			}
-		}
-
+		newDeps, found := removeFromSlice(ticket.Deps, depID)
 		if !found {
 			return fmt.Errorf("dependency %s not found on %s", depID, ticketID)
 		}
