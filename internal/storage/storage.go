@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 
 	"github.com/radutopala/ticket/internal/domain"
 )
@@ -203,10 +202,10 @@ func (s *Storage) AtomicClaim(id string) (*domain.Ticket, error) {
 	defer func() { _ = file.Close() }()
 
 	// Acquire exclusive lock (blocking)
-	if err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX); err != nil {
+	if err := lockFile(file); err != nil {
 		return nil, fmt.Errorf("failed to acquire lock: %w", err)
 	}
-	defer func() { _ = syscall.Flock(int(file.Fd()), syscall.LOCK_UN) }()
+	defer func() { _ = unlockFile(file) }()
 
 	// Read current content
 	data, err := os.ReadFile(path)
