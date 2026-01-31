@@ -13,7 +13,21 @@ var queryCmd = &cobra.Command{
 	Use:   "query [jq-filter]",
 	Short: "Output tickets as JSON, optionally filtered with jq",
 	Long: `Output all tickets as a JSON array. If a jq filter is provided,
-the output will be piped through jq with that filter.`,
+the output will be piped through jq with that filter.
+
+Examples:
+  tk query                                    # All tickets as JSON
+  tk query '.[] | .ID'                        # List all ticket IDs
+  tk query '[.[] | select(.Status=="open")]'  # Open tickets only
+  tk query '[.[] | select(.Priority==0)]'     # Highest priority tickets
+  tk query '[.[] | select(.Assignee=="joe")]' # Tickets assigned to joe
+  tk query '[.[] | select(.Tags | index("urgent"))]'  # Tagged "urgent"
+  tk query '[.[] | select(.Deps | length > 0)]'       # Tickets with deps
+  tk query '.[] | {id: .ID, title: .Title}'   # Custom output format
+
+JSON fields: ID, Status, Type, Priority, Assignee, Parent, ExternalRef,
+             Tags, Deps, Links, Created, Title, Description, Design,
+             Acceptance, Notes`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		tickets, err := store.List()
