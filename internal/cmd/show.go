@@ -2,8 +2,11 @@ package cmd
 
 import (
 	"fmt"
+	"io"
+	"slices"
 	"strings"
 
+	"github.com/radutopala/ticket/internal/domain"
 	"github.com/spf13/cobra"
 )
 
@@ -53,7 +56,80 @@ var showCmd = &cobra.Command{
 			output = strings.Join(result, "\n")
 		}
 
-		fmt.Print(output)
-		return nil
+		// Get relationships
+		relationships, err := getTicketRelationships(id, ticket)
+		if err != nil {
+			return fmt.Errorf("failed to get relationships: %w", err)
+		}
+
+		return runWithPager(func(w io.Writer) error {
+			if _, err := fmt.Fprint(w, output); err != nil {
+				return err
+			}
+			if relationships != "" {
+				if _, err := fmt.Fprintln(w, "---"); err != nil {
+					return err
+				}
+				if _, err := fmt.Fprint(w, relationships); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
 	},
+}
+
+// getTicketRelationships returns a string with the ticket's relationships.
+func getTicketRelationships(id string, ticket *domain.Ticket) (string, error) {
+	allTickets, err := store.List()
+	if err != nil {
+		return "", err
+	}
+
+	var blocking []string
+	var children []string
+
+	for _, t := range allTickets {
+		if t.ID == id {
+			continue
+		}
+
+		// Check if this ticket depends on us (we are blocking it)
+		if slices.Contains(t.Deps, id) {
+			blocking = append(blocking, t.ID)
+		}
+
+		// Check if this ticket is a child of us
+		if t.Parent == id {
+			children = append(children, t.ID)
+		}
+	}
+
+	var lines []string
+
+	// Blockers (tickets this one depends on)
+	if len(ticket.Deps) > 0 {
+		lines = append(lines, fmt.Sprintf("Blockers: %s", strings.Join(ticket.Deps, ", ")))
+	}
+
+	// Blocking (tickets that depend on this one)
+	if len(blocking) > 0 {
+		lines = append(lines, fmt.Sprintf("Blocking: %s", strings.Join(blocking, ", ")))
+	}
+
+	// Children (tickets with this ticket as parent)
+	if len(children) > 0 {
+		lines = append(lines, fmt.Sprintf("Children: %s", strings.Join(children, ", ")))
+	}
+
+	// Links (bidirectionally linked tickets)
+	if len(ticket.Links) > 0 {
+		lines = append(lines, fmt.Sprintf("Links: %s", strings.Join(ticket.Links, ", ")))
+	}
+
+	if len(lines) == 0 {
+		return "", nil
+	}
+
+	return strings.Join(lines, "\n") + "\n", nil
 }

@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"fmt"
+	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -33,11 +35,16 @@ var createCmd = &cobra.Command{
 			return fmt.Errorf("failed to generate ID: %w", err)
 		}
 
+		assignee := createFlags.assignee
+		if assignee == "" {
+			assignee = getGitUserName()
+		}
+
 		ticket := &domain.Ticket{
 			ID:          id,
 			Status:      domain.StatusOpen,
 			Priority:    createFlags.priority,
-			Assignee:    createFlags.assignee,
+			Assignee:    assignee,
 			ExternalRef: createFlags.externalRef,
 			Parent:      createFlags.parent,
 			Tags:        createFlags.tags,
@@ -72,6 +79,16 @@ var createCmd = &cobra.Command{
 		fmt.Println(id)
 		return nil
 	},
+}
+
+// getGitUserName returns the git user.name config value, or empty string if unavailable.
+func getGitUserName() string {
+	cmd := exec.Command("git", "config", "user.name")
+	output, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(output))
 }
 
 func init() {

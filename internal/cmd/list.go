@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"sort"
 	"strings"
 
@@ -30,11 +31,14 @@ var listCmd = &cobra.Command{
 		filtered := filterTickets(tickets, listFlags.status, listFlags.assignee, listFlags.tag)
 		sortTicketsByPriority(filtered)
 
-		for _, t := range filtered {
-			fmt.Printf("%s [P%d][%s] - %s\n", t.ID, t.Priority, t.Status, t.Title)
-		}
-
-		return nil
+		return runWithPager(func(w io.Writer) error {
+			for _, t := range filtered {
+				if _, err := fmt.Fprintf(w, "%s [P%d][%s] - %s\n", t.ID, t.Priority, t.Status, t.Title); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
 	},
 }
 
@@ -82,11 +86,14 @@ var readyCmd = &cobra.Command{
 
 		sortTicketsByPriority(ready)
 
-		for _, t := range ready {
-			fmt.Printf("%s [P%d][%s] - %s\n", t.ID, t.Priority, t.Status, t.Title)
-		}
-
-		return nil
+		return runWithPager(func(w io.Writer) error {
+			for _, t := range ready {
+				if _, err := fmt.Fprintf(w, "%s [P%d][%s] - %s\n", t.ID, t.Priority, t.Status, t.Title); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
 	},
 }
 
@@ -134,11 +141,14 @@ var blockedCmd = &cobra.Command{
 
 		sortTicketsByPriority(blocked)
 
-		for _, t := range blocked {
-			fmt.Printf("%s [P%d][%s] - %s\n", t.ID, t.Priority, t.Status, t.Title)
-		}
-
-		return nil
+		return runWithPager(func(w io.Writer) error {
+			for _, t := range blocked {
+				if _, err := fmt.Fprintf(w, "%s [P%d][%s] - %s\n", t.ID, t.Priority, t.Status, t.Title); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
 	},
 }
 
@@ -178,11 +188,14 @@ var closedCmd = &cobra.Command{
 			closed = closed[:closedFlags.limit]
 		}
 
-		for _, t := range closed {
-			fmt.Printf("%s [P%d][%s] - %s\n", t.ID, t.Priority, t.Status, t.Title)
-		}
-
-		return nil
+		return runWithPager(func(w io.Writer) error {
+			for _, t := range closed {
+				if _, err := fmt.Fprintf(w, "%s [P%d][%s] - %s\n", t.ID, t.Priority, t.Status, t.Title); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
 	},
 }
 

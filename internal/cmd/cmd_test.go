@@ -42,6 +42,15 @@ func (s *CmdSuite) SetupTest() {
 	listFlags.assignee = ""
 	listFlags.tag = ""
 	closedFlags.limit = 20
+	createFlags.description = ""
+	createFlags.design = ""
+	createFlags.acceptance = ""
+	createFlags.ticketType = ""
+	createFlags.priority = 2
+	createFlags.assignee = ""
+	createFlags.externalRef = ""
+	createFlags.parent = ""
+	createFlags.tags = nil
 
 	s.cleanup = func() {
 		_ = os.RemoveAll(tempDir)
@@ -706,4 +715,44 @@ func (s *CmdSuite) TestHelpOutput() {
 	// Verify footer about .tickets/
 	require.Contains(s.T(), output, "Tickets stored as markdown files in .tickets/")
 	require.Contains(s.T(), output, "Supports partial ID matching")
+}
+
+func (s *CmdSuite) TestGetGitUserName() {
+	// Test that getGitUserName returns a value (assuming git is configured in test env)
+	name := getGitUserName()
+	// In a typical dev environment, git user.name should be set
+	// We just check that the function doesn't panic and returns something reasonable
+	_ = name
+}
+
+func (s *CmdSuite) TestCreateWithoutAssigneeUsesGitUserName() {
+	// Create a ticket without specifying assignee
+	output, err := s.executeCommand("create", "Test Ticket No Assignee")
+
+	require.NoError(s.T(), err)
+	id := strings.TrimSpace(output)
+	require.Contains(s.T(), id, "tic-")
+
+	// Read the ticket and check if assignee was set to git user.name
+	ticket, err := store.Read(id)
+	require.NoError(s.T(), err)
+
+	// The assignee should be set to the git user.name (or empty if git is not configured)
+	gitUserName := getGitUserName()
+	require.Equal(s.T(), gitUserName, ticket.Assignee)
+}
+
+func (s *CmdSuite) TestCreateWithExplicitAssigneeOverridesGitUserName() {
+	// Create a ticket with explicit assignee
+	output, err := s.executeCommand("create", "Test Ticket Explicit Assignee",
+		"--assignee", "explicit-user")
+
+	require.NoError(s.T(), err)
+	id := strings.TrimSpace(output)
+	require.Contains(s.T(), id, "tic-")
+
+	// Read the ticket and verify explicit assignee takes priority
+	ticket, err := store.Read(id)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), "explicit-user", ticket.Assignee)
 }
