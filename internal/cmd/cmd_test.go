@@ -825,3 +825,163 @@ func (s *CmdSuite) TestCreateWithValidParentPartialID() {
 	require.NoError(s.T(), err)
 	require.Equal(s.T(), "tic-parent-partial", ticket.Parent)
 }
+
+func (s *CmdSuite) TestCreateWithExternalRef() {
+	output, err := s.executeCommand("create", "External Ref Ticket", "--external-ref", "gh-123")
+
+	require.NoError(s.T(), err)
+	id := strings.TrimSpace(output)
+	ticket, err := store.Read(id)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), "gh-123", ticket.ExternalRef)
+}
+
+func (s *CmdSuite) TestCreateWithTags() {
+	output, err := s.executeCommand("create", "Tagged Ticket", "--tags", "backend,urgent,api")
+
+	require.NoError(s.T(), err)
+	id := strings.TrimSpace(output)
+	ticket, err := store.Read(id)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), []string{"backend", "urgent", "api"}, ticket.Tags)
+}
+
+func (s *CmdSuite) TestDepTreeFullFlag() {
+	// Create a chain of dependencies
+	s.createTestTicket("tic-tree-full-a", domain.StatusOpen, "Tree A")
+	t := s.createTestTicket("tic-tree-full-b", domain.StatusOpen, "Tree B")
+	t.Deps = []string{"tic-tree-full-a"}
+	require.NoError(s.T(), store.Write(t))
+
+	output, err := s.executeCommand("dep", "tree", "--full")
+
+	require.NoError(s.T(), err)
+	require.Contains(s.T(), output, "tic-tree-full")
+}
+
+func (s *CmdSuite) TestDepTreeForSpecificTicket() {
+	s.createTestTicket("tic-tree-spec-a", domain.StatusOpen, "Spec A")
+	t := s.createTestTicket("tic-tree-spec-b", domain.StatusOpen, "Spec B")
+	t.Deps = []string{"tic-tree-spec-a"}
+	require.NoError(s.T(), store.Write(t))
+
+	output, err := s.executeCommand("dep", "tree", "tic-tree-spec-b")
+
+	require.NoError(s.T(), err)
+	require.Contains(s.T(), output, "tic-tree-spec-b")
+	require.Contains(s.T(), output, "tic-tree-spec-a")
+}
+
+func (s *CmdSuite) TestUndepCommand() {
+	s.createTestTicket("tic-undep-a", domain.StatusOpen, "Undep A")
+	t := s.createTestTicket("tic-undep-b", domain.StatusOpen, "Undep B")
+	t.Deps = []string{"tic-undep-a"}
+	require.NoError(s.T(), store.Write(t))
+
+	output, err := s.executeCommand("undep", "tic-undep-b", "tic-undep-a")
+
+	require.NoError(s.T(), err)
+	require.Contains(s.T(), output, "Removed dependency")
+
+	// Verify the dependency was removed
+	ticket, err := store.Read("tic-undep-b")
+	require.NoError(s.T(), err)
+	require.NotContains(s.T(), ticket.Deps, "tic-undep-a")
+}
+
+func (s *CmdSuite) TestAddNoteCommand() {
+	s.createTestTicket("tic-note1", domain.StatusOpen, "Note Test Ticket")
+
+	output, err := s.executeCommand("add-note", "tic-note1", "This is a test note")
+
+	require.NoError(s.T(), err)
+	require.Contains(s.T(), output, "Added note")
+
+	// Verify the note was added
+	ticket, err := store.Read("tic-note1")
+	require.NoError(s.T(), err)
+	require.Len(s.T(), ticket.Notes, 1)
+	require.Contains(s.T(), ticket.Notes[0].Content, "This is a test note")
+}
+
+func (s *CmdSuite) TestAddNoteCommandNotFound() {
+	_, err := s.executeCommand("add-note", "nonexistent", "Note text")
+	require.Error(s.T(), err)
+	require.Contains(s.T(), err.Error(), "not found")
+}
+
+func (s *CmdSuite) TestAddNoteCommandMultipleNotes() {
+	s.createTestTicket("tic-note2", domain.StatusOpen, "Multiple Notes Ticket")
+
+	_, err := s.executeCommand("add-note", "tic-note2", "First note")
+	require.NoError(s.T(), err)
+
+	_, err = s.executeCommand("add-note", "tic-note2", "Second note")
+	require.NoError(s.T(), err)
+
+	ticket, err := store.Read("tic-note2")
+	require.NoError(s.T(), err)
+	require.Len(s.T(), ticket.Notes, 2)
+	require.Contains(s.T(), ticket.Notes[0].Content, "First note")
+	require.Contains(s.T(), ticket.Notes[1].Content, "Second note")
+}
+
+func (s *CmdSuite) TestQueryWithJqFilter() {
+	s.createTestTicket("tic-jq1", domain.StatusOpen, "JQ Test 1")
+	s.createTestTicket("tic-jq2", domain.StatusClosed, "JQ Test 2")
+
+	output, err := s.executeCommand("query", ".[] | select(.Status == \"open\") | .ID")
+
+	require.NoError(s.T(), err)
+	require.Contains(s.T(), output, "tic-jq1")
+	require.NotContains(s.T(), output, "tic-jq2")
+}
+
+func (s *CmdSuite) TestQueryWithLengthFilter() {
+	s.createTestTicket("tic-jqlen1", domain.StatusOpen, "Length Test 1")
+	s.createTestTicket("tic-jqlen2", domain.StatusOpen, "Length Test 2")
+
+	output, err := s.executeCommand("query", "length")
+
+	require.NoError(s.T(), err)
+	// Output should contain the count (at least 2)
+	require.NotEmpty(s.T(), strings.TrimSpace(output))
+}
+
+func (s *CmdSuite) TestDepCheckWithCycle() {
+	// Create tickets with a cycle
+	t1 := s.createTestTicket("tic-cycle1", domain.StatusOpen, "Cycle 1")
+	t2 := s.createTestTicket("tic-cycle2", domain.StatusOpen, "Cycle 2")
+
+	t1.Deps = []string{"tic-cycle2"}
+	require.NoError(s.T(), store.Write(t1))
+	t2.Deps = []string{"tic-cycle1"}
+	require.NoError(s.T(), store.Write(t2))
+
+	_, err := s.executeCommand("dep", "check")
+
+	require.Error(s.T(), err)
+	require.Contains(s.T(), err.Error(), "cycle")
+}
+
+func (s *CmdSuite) TestLinkMultipleTickets() {
+	s.createTestTicket("tic-mlink1", domain.StatusOpen, "Multi Link 1")
+	s.createTestTicket("tic-mlink2", domain.StatusOpen, "Multi Link 2")
+	s.createTestTicket("tic-mlink3", domain.StatusOpen, "Multi Link 3")
+
+	output, err := s.executeCommand("link", "tic-mlink1", "tic-mlink2", "tic-mlink3")
+
+	require.NoError(s.T(), err)
+	require.Contains(s.T(), output, "Linked")
+
+	// Verify all tickets are linked to each other
+	t1, err := store.Read("tic-mlink1")
+	require.NoError(s.T(), err)
+	require.Contains(s.T(), t1.Links, "tic-mlink2")
+	require.Contains(s.T(), t1.Links, "tic-mlink3")
+
+	t2, err := store.Read("tic-mlink2")
+	require.NoError(s.T(), err)
+	require.Contains(s.T(), t2.Links, "tic-mlink1")
+	require.Contains(s.T(), t2.Links, "tic-mlink3")
+}
