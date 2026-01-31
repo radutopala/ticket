@@ -1,5 +1,10 @@
 # tk: A Git-Backed Issue Tracker
 
+[![Go Version](https://img.shields.io/github/go-mod/go-version/radutopala/ticket)](https://go.dev/)
+[![CI](https://github.com/radutopala/ticket/actions/workflows/ci.yaml/badge.svg)](https://github.com/radutopala/ticket/actions/workflows/ci.yaml)
+[![Release](https://img.shields.io/github/v/release/radutopala/ticket)](https://github.com/radutopala/ticket/releases/latest)
+[![License](https://img.shields.io/github/license/radutopala/ticket)](LICENSE)
+
 A minimal CLI ticket management system designed for AI agents. This is a Go port of [wedow/ticket](https://github.com/wedow/ticket).
 
 ## Overview
