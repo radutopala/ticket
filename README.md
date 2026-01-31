@@ -13,9 +13,15 @@ A minimal CLI ticket management system designed for AI agents. This is a Go port
 
 ## Installation
 
-### From Source
+### Go Install
 
 Requires Go 1.25+:
+
+```bash
+go install github.com/radutopala/ticket/cmd/tk@latest
+```
+
+### From Source
 
 ```bash
 git clone https://github.com/radutopala/ticket.git
@@ -23,7 +29,7 @@ cd ticket
 make install
 ```
 
-This installs `tk` to your `$GOPATH/bin`.
+Both methods install `tk` to your `$GOPATH/bin`.
 
 ### Build Locally
 
@@ -40,10 +46,42 @@ make build
 
 ## Agent Integration
 
-Add this to your `CLAUDE.md` or `AGENTS.md`:
+### Claude Code Setup
+
+Add to your project's `CLAUDE.md`:
+
+```markdown
+This project uses `tk` for ticket management. Run `tk` to see available commands.
+
+Workflow:
+- Use `tk ready` to find tickets ready to work on
+- Use `tk start <id>` to claim a ticket before working on it
+- Use `tk add-note <id> "progress update"` to document progress
+- Use `tk close <id>` when complete
+```
+
+Optionally, add to `.claude/settings.local.json` to allow ticket commands:
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Bash(tk *)"
+    ]
+  }
+}
+```
+
+### Other AI Agents
+
+Add to your `AGENTS.md` or system prompt:
 
 ```
-This project uses a CLI ticket system for task management. Run `tk` when you need to use it.
+This project uses a CLI ticket system. Run `tk` for help. Key commands:
+- tk ready          List tickets ready to work on
+- tk start <id>     Claim a ticket
+- tk show <id>      View ticket details
+- tk close <id>     Mark complete
 ```
 
 ## Command Reference
