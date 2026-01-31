@@ -94,6 +94,8 @@ Available Commands:
   unlink <id> <target-id>  Remove link between tickets
   add-note <id> [text]     Append timestamped note (text or stdin)
   query [jq-filter]        Output tickets as JSON, optionally filtered with jq
+  version                  Print version information
+  update                   Update tk to the latest version
 
 Use "tk [command] --help" for more information about a command.
 
