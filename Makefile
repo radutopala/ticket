@@ -1,12 +1,13 @@
-.PHONY: help build install lint test clean
+.PHONY: help build install lint test clean snapshot
 
 help:
-	@echo "make help    Show this help message"
-	@echo "make build   Build the tk binary"
-	@echo "make install Install tk to GOPATH/bin"
-	@echo "make lint    Run golangci-lint"
-	@echo "make test    Run tests"
-	@echo "make clean   Remove build artifacts"
+	@echo "make help     Show this help message"
+	@echo "make build    Build the tk binary"
+	@echo "make install  Install tk to GOPATH/bin"
+	@echo "make lint     Run golangci-lint"
+	@echo "make test     Run tests"
+	@echo "make snapshot Build release snapshot (local test)"
+	@echo "make clean    Remove build artifacts"
 
 build:
 	go build -o bin/tk ./cmd/tk
@@ -21,4 +22,7 @@ test:
 	go test -race -v ./...
 
 clean:
-	rm -rf bin/
+	rm -rf bin/ dist/
+
+snapshot:
+	goreleaser release --snapshot --clean
