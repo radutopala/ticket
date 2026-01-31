@@ -9,6 +9,8 @@ A minimal CLI ticket management system designed for AI agents. This is a Go port
 
 ## Quick Demo
 
+> Play the full demo: `asciinema play https://raw.githubusercontent.com/radutopala/ticket/main/demo.cast`
+
 ```bash
 $ tk create "Fix login bug" -t bug -p 1 --tags auth,urgent
 tic-a1b2
