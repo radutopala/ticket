@@ -10,7 +10,7 @@
   "plugins": [
     {
       "name": "tk",
-      "source": ".",
+      "source": "./",
       "strict": false,
       "description": "Minimal CLI ticket management system for AI agents. A git-backed issue tracker storing tickets as markdown files with YAML frontmatter.",
       "version": "0.2.3",
