@@ -1,0 +1,27 @@
+{
+  "name": "ticket",
+  "owner": {
+    "name": "Radu Topala",
+    "email": "radu.topala@trisoft.ro"
+  },
+  "metadata": {
+    "description": "Git-backed issue tracking CLI tools and skills for Claude Code"
+  },
+  "plugins": [
+    {
+      "name": "tk",
+      "source": ".",
+      "strict": false,
+      "description": "Minimal CLI ticket management system for AI agents. A git-backed issue tracker storing tickets as markdown files with YAML frontmatter.",
+      "version": "0.2.3",
+      "author": {
+        "name": "Radu Topala",
+        "email": "radu.topala@trisoft.ro"
+      },
+      "homepage": "https://github.com/radutopala/ticket",
+      "repository": "https://github.com/radutopala/ticket",
+      "license": "MIT",
+      "keywords": ["ticket", "issue-tracker", "ai-agents", "git-backed", "cli"]
+    }
+  ]
+}

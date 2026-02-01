@@ -116,6 +116,20 @@ This project uses a CLI ticket system. Run `tk` for help. Key commands:
 - tk close <id>     Mark complete
 ```
 
+### Claude Code Plugin
+
+Install `tk` as a Claude Code plugin for the `/tk` skill:
+
+```bash
+# Add the marketplace
+/plugin marketplace add radutopala/ticket
+
+# Install the plugin
+/plugin install tk
+```
+
+Then use `/tk` to get a comprehensive command reference and workflow guide.
+
 ## Command Reference
 
 ### Core Operations
