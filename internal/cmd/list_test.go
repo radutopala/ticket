@@ -144,7 +144,7 @@ func (s *ListSuite) TestFilterTickets() {
 	}
 }
 
-func (s *ListSuite) TestSortTicketsByPriority() {
+func (s *ListSuite) TestSortTicketsDefaultPriority() {
 	tests := []struct {
 		name    string
 		tickets []*domain.Ticket
@@ -191,10 +191,87 @@ func (s *ListSuite) TestSortTicketsByPriority() {
 			tickets := make([]*domain.Ticket, len(tt.tickets))
 			copy(tickets, tt.tickets)
 
-			sortTicketsByPriority(tickets)
+			sortTickets(tickets, SortOptions{})
 
 			var ids []string
 			for _, t := range tickets {
+				ids = append(ids, t.ID)
+			}
+
+			require.Equal(s.T(), tt.wantIDs, ids)
+		})
+	}
+}
+
+func (s *ListSuite) TestSortTickets() {
+	now := time.Now()
+	tickets := []*domain.Ticket{
+		{ID: "t1", Priority: 2, Status: domain.StatusOpen, Title: "Beta feature", Created: now.Add(-3 * time.Hour)},
+		{ID: "t2", Priority: 1, Status: domain.StatusClosed, Title: "Alpha bug", Created: now.Add(-1 * time.Hour)},
+		{ID: "t3", Priority: 3, Status: domain.StatusInProgress, Title: "Gamma task", Created: now.Add(-2 * time.Hour)},
+	}
+
+	tests := []struct {
+		name    string
+		sortBy  string
+		reverse bool
+		wantIDs []string
+	}{
+		{
+			name:    "sort by priority default",
+			sortBy:  "",
+			wantIDs: []string{"t2", "t1", "t3"},
+		},
+		{
+			name:    "sort by priority explicit",
+			sortBy:  "priority",
+			wantIDs: []string{"t2", "t1", "t3"},
+		},
+		{
+			name:    "sort by priority reversed",
+			sortBy:  "priority",
+			reverse: true,
+			wantIDs: []string{"t3", "t1", "t2"},
+		},
+		{
+			name:    "sort by created",
+			sortBy:  "created",
+			wantIDs: []string{"t1", "t3", "t2"},
+		},
+		{
+			name:    "sort by created reversed",
+			sortBy:  "created",
+			reverse: true,
+			wantIDs: []string{"t2", "t3", "t1"},
+		},
+		{
+			name:    "sort by status",
+			sortBy:  "status",
+			wantIDs: []string{"t2", "t3", "t1"},
+		},
+		{
+			name:    "sort by title",
+			sortBy:  "title",
+			wantIDs: []string{"t2", "t1", "t3"},
+		},
+		{
+			name:    "sort by title reversed",
+			sortBy:  "title",
+			reverse: true,
+			wantIDs: []string{"t3", "t1", "t2"},
+		},
+	}
+
+	for _, tt := range tests {
+		s.Run(tt.name, func() {
+			// Make a copy to avoid mutating original
+			ticketsCopy := make([]*domain.Ticket, len(tickets))
+			copy(ticketsCopy, tickets)
+
+			sortTickets(ticketsCopy, SortOptions{SortBy: tt.sortBy, Reverse: tt.reverse})
+
+			var ids []string
+			for _, t := range ticketsCopy {
 				ids = append(ids, t.ID)
 			}
 

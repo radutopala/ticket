@@ -18,14 +18,9 @@ var addNoteCmd = &cobra.Command{
 	Long:  `Append a timestamped note to a ticket. Text can be provided as an argument or piped via stdin.`,
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, err := store.ResolveID(args[0])
+		ticket, err := resolveAndReadTicket(args[0])
 		if err != nil {
 			return fmt.Errorf("failed to resolve ticket ID: %w", err)
-		}
-
-		ticket, err := store.Read(id)
-		if err != nil {
-			return err
 		}
 
 		// Get note text from args or stdin
@@ -63,7 +58,7 @@ var addNoteCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Printf("Added note to %s\n", id)
+		fmt.Printf("Added note to %s\n", ticket.ID)
 		return nil
 	},
 }

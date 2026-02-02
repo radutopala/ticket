@@ -21,6 +21,16 @@ const (
 	StatusClosed     Status = "closed"
 )
 
+// ValidStatuses contains all valid status values in display order.
+var ValidStatuses = []Status{StatusOpen, StatusInProgress, StatusClosed}
+
+// StatusSymbols maps status values to their display symbols.
+var StatusSymbols = map[Status]string{
+	StatusOpen:       "[ ]",
+	StatusInProgress: "[~]",
+	StatusClosed:     "[x]",
+}
+
 // String returns the string representation of the status.
 func (s Status) String() string {
 	return string(s)
@@ -61,6 +71,9 @@ const (
 	TypeChore   Type = "chore"
 )
 
+// ValidTypes contains all valid type values in display order.
+var ValidTypes = []Type{TypeTask, TypeBug, TypeFeature, TypeEpic, TypeChore}
+
 // String returns the string representation of the type.
 func (t Type) String() string {
 	return string(t)
@@ -93,6 +106,14 @@ func ParseType(s string) (Type, error) {
 		return "", fmt.Errorf("invalid type: %s", s)
 	}
 }
+
+// Priority constants define the valid range for ticket priorities.
+// Lower values indicate higher priority (0 = highest, 4 = lowest).
+const (
+	MinPriority     = 0
+	MaxPriority     = 4
+	DefaultPriority = 2
+)
 
 // Note represents a timestamped note on a ticket.
 type Note struct {

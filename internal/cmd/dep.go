@@ -221,20 +221,32 @@ func findRootTickets(tickets []*domain.Ticket, ticketMap map[string]*domain.Tick
 	return roots
 }
 
-// printDepTree prints a dependency tree recursively.
-func printDepTree(ticket *domain.Ticket, ticketMap map[string]*domain.Ticket, prefix string, isLast bool) {
+// formatTreeNode returns a formatted string for a ticket node.
+func formatTreeNode(ticket *domain.Ticket) string {
+	return fmt.Sprintf("%s %s - %s", statusIndicator(ticket.Status), ticket.ID, ticket.Title)
+}
+
+// formatMissingNode returns a formatted string for a missing dependency.
+func formatMissingNode(depID string) string {
+	return fmt.Sprintf("[?] %s - (not found)", depID)
+}
+
+// buildDepTreeString builds a dependency tree string recursively.
+func buildDepTreeString(ticket *domain.Ticket, ticketMap map[string]*domain.Ticket, prefix string, isLast bool) string {
+	var sb strings.Builder
+
 	// Determine connector
 	connector := "├── "
 	if isLast {
 		connector = "└── "
 	}
 
-	// Print this ticket
-	statusStr := statusIndicator(ticket.Status)
+	// Format this ticket
+	nodeStr := formatTreeNode(ticket)
 	if prefix == "" {
-		fmt.Printf("%s %s - %s\n", statusStr, ticket.ID, ticket.Title)
+		sb.WriteString(nodeStr + "\n")
 	} else {
-		fmt.Printf("%s%s%s %s - %s\n", prefix, connector, statusStr, ticket.ID, ticket.Title)
+		sb.WriteString(prefix + connector + nodeStr + "\n")
 	}
 
 	// Calculate prefix for children
@@ -247,7 +259,7 @@ func printDepTree(ticket *domain.Ticket, ticketMap map[string]*domain.Ticket, pr
 		}
 	}
 
-	// Print dependencies
+	// Build dependency strings
 	deps := ticket.Deps
 	for i, depID := range deps {
 		dep, ok := ticketMap[depID]
@@ -257,26 +269,27 @@ func printDepTree(ticket *domain.Ticket, ticketMap map[string]*domain.Ticket, pr
 			if i == len(deps)-1 {
 				depConnector = "└── "
 			}
-			fmt.Printf("%s%s[?] %s - (not found)\n", childPrefix, depConnector, depID)
+			sb.WriteString(childPrefix + depConnector + formatMissingNode(depID) + "\n")
 			continue
 		}
 
-		printDepTree(dep, ticketMap, childPrefix, i == len(deps)-1)
+		sb.WriteString(buildDepTreeString(dep, ticketMap, childPrefix, i == len(deps)-1))
 	}
+
+	return sb.String()
+}
+
+// printDepTree prints a dependency tree recursively.
+func printDepTree(ticket *domain.Ticket, ticketMap map[string]*domain.Ticket, prefix string, isLast bool) {
+	fmt.Print(buildDepTreeString(ticket, ticketMap, prefix, isLast))
 }
 
 // statusIndicator returns a status indicator for display.
 func statusIndicator(status domain.Status) string {
-	switch status {
-	case domain.StatusOpen:
-		return "[ ]"
-	case domain.StatusInProgress:
-		return "[~]"
-	case domain.StatusClosed:
-		return "[x]"
-	default:
-		return "[?]"
+	if symbol, ok := domain.StatusSymbols[status]; ok {
+		return symbol
 	}
+	return "[?]"
 }
 
 // TopologicalSort returns tickets in topological order based on dependencies.

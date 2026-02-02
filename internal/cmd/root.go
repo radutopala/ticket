@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/radutopala/ticket/internal/config"
+	"github.com/radutopala/ticket/internal/domain"
 	"github.com/radutopala/ticket/internal/storage"
 )
 
@@ -59,7 +60,7 @@ Available Commands:
     --design               Design notes
     --acceptance           Acceptance criteria
     -t, --type             Type (bug|feature|task|epic|chore) [default: task]
-    -p, --priority         Priority 0-4, 0=highest [default: 2]
+    -p, --priority         Priority %d-%d, %d=highest [default: %d]
     -a, --assignee         Assignee
     --external-ref         External reference (e.g., gh-123, JIRA-456)
     --parent               Parent ticket ID
@@ -74,16 +75,24 @@ Available Commands:
     --status               Filter by status (open|in_progress|closed)
     -a, --assignee         Filter by assignee
     -T, --tag              Filter by tag
+    -s, --sort             Sort by field (priority|created|status|title)
+    -r, --reverse          Reverse sort order
   ready                    List open/in_progress tickets with resolved deps
     -a, --assignee         Filter by assignee
     -T, --tag              Filter by tag
+    -s, --sort             Sort by field (priority|created|status|title)
+    -r, --reverse          Reverse sort order
   blocked                  List open/in_progress tickets with unresolved deps
     -a, --assignee         Filter by assignee
     -T, --tag              Filter by tag
+    -s, --sort             Sort by field (priority|created|status|title)
+    -r, --reverse          Reverse sort order
   closed                   List recently closed tickets
     --limit                Limit number of results [default: 20]
     -a, --assignee         Filter by assignee
     -T, --tag              Filter by tag
+    -s, --sort             Sort by field (priority|created|status|title)
+    -r, --reverse          Reverse sort order
   dep add <id> <dep-id>    Add dependency (id depends on dep-id)
   dep remove <id> <dep-id> Remove dependency (alias: rm)
   dep tree [id]            Show dependency tree
@@ -94,6 +103,21 @@ Available Commands:
   unlink <id> <target-id>  Remove link between tickets
   add-note <id> [text]     Append timestamped note (text or stdin)
   query [jq-filter]        Output tickets as JSON, optionally filtered with jq
+  search <query>           Search tickets by text
+    --case-sensitive       Perform case-sensitive search
+    --status               Filter by status (open|in_progress|closed)
+  stats                    Display project metrics
+    --json                 Output as JSON
+  export                   Export tickets to JSON or CSV
+    --format               Output format (json|csv) [default: json]
+    -o, --output           Output file (default: stdout)
+  import <file>            Import tickets from JSON file
+    --skip-existing        Skip tickets that already exist
+  bulk <action>            Bulk operations (close|reopen|start)
+    --tag                  Filter by tag
+    --status               Filter by status
+    -a, --assignee         Filter by assignee
+    --dry-run              Preview changes without applying
   version                  Print version information
   update                   Update tk to the latest version
 
@@ -102,7 +126,7 @@ Use "tk [command] --help" for more information about a command.
 Tickets stored as markdown files in .tickets/
 Supports partial ID matching (e.g., 'tk show 5c4' matches 'nw-5c46')
 `
-	fmt.Print(helpText)
+	fmt.Printf(helpText, domain.MinPriority, domain.MaxPriority, domain.MinPriority, domain.DefaultPriority)
 }
 
 // GetConfig returns the loaded configuration.
@@ -148,4 +172,9 @@ func init() {
 	rootCmd.AddCommand(unlinkCmd)
 	rootCmd.AddCommand(addNoteCmd)
 	rootCmd.AddCommand(queryCmd)
+	rootCmd.AddCommand(searchCmd)
+	rootCmd.AddCommand(statsCmd)
+	rootCmd.AddCommand(exportCmd)
+	rootCmd.AddCommand(importCmd)
+	rootCmd.AddCommand(bulkCmd)
 }

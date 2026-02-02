@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"archive/tar"
+	"archive/zip"
+	"bytes"
 	"compress/gzip"
 	"fmt"
 	"io"
@@ -159,9 +161,10 @@ func downloadAndReplace(version, exePath string) error {
 			return err
 		}
 	} else {
-		// TODO: handle zip for Windows
-		tmpFile.Close()
-		return fmt.Errorf("zip extraction not implemented")
+		if err := extractZip(resp.Body, tmpFile); err != nil {
+			tmpFile.Close()
+			return err
+		}
 	}
 	tmpFile.Close()
 
@@ -213,4 +216,32 @@ func extractTarGz(r io.Reader, w io.Writer) error {
 	}
 
 	return fmt.Errorf("tk binary not found in archive")
+}
+
+func extractZip(r io.Reader, w io.Writer) error {
+	// Read all content into memory since zip requires seeking
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return err
+	}
+
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		return err
+	}
+
+	for _, f := range zr.File {
+		// Look for the tk.exe binary
+		if filepath.Base(f.Name) == "tk.exe" {
+			rc, err := f.Open()
+			if err != nil {
+				return err
+			}
+			defer rc.Close()
+			_, err = io.Copy(w, rc)
+			return err
+		}
+	}
+
+	return fmt.Errorf("tk.exe binary not found in archive")
 }

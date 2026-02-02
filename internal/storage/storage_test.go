@@ -96,6 +96,72 @@ func (s *StorageSuite) TestList() {
 	require.Len(s.T(), list, 3)
 }
 
+func (s *StorageSuite) TestList_EmptyDirectory() {
+	// Empty directory should return empty slice
+	list, err := s.storage.List()
+	require.NoError(s.T(), err)
+	require.Len(s.T(), list, 0)
+}
+
+func (s *StorageSuite) TestList_NonExistentDirectory() {
+	// Storage pointing to non-existent directory should return nil, nil
+	storage := New(filepath.Join(s.tempDir, "nonexistent"))
+	list, err := storage.List()
+	require.NoError(s.T(), err)
+	require.Nil(s.T(), list)
+}
+
+func (s *StorageSuite) TestList_SkipsSubdirectories() {
+	// Create a subdirectory that should be skipped
+	subDir := filepath.Join(s.storage.TicketsDir(), "subdir.md")
+	require.NoError(s.T(), os.MkdirAll(subDir, 0755))
+
+	// Create a real ticket
+	ticket := &domain.Ticket{
+		ID:      "tic-real",
+		Status:  domain.StatusOpen,
+		Created: time.Now().UTC(),
+	}
+	require.NoError(s.T(), s.storage.Write(ticket))
+
+	list, err := s.storage.List()
+	require.NoError(s.T(), err)
+	require.Len(s.T(), list, 1)
+	require.Equal(s.T(), "tic-real", list[0].ID)
+}
+
+func (s *StorageSuite) TestList_SkipsNonMdFiles() {
+	// Create non-.md files that should be skipped
+	txtFile := filepath.Join(s.storage.TicketsDir(), "tic-fake.txt")
+	require.NoError(s.T(), os.WriteFile(txtFile, []byte("not a ticket"), 0644))
+
+	jsonFile := filepath.Join(s.storage.TicketsDir(), "config.json")
+	require.NoError(s.T(), os.WriteFile(jsonFile, []byte("{}"), 0644))
+
+	// Create a real ticket
+	ticket := &domain.Ticket{
+		ID:      "tic-actual",
+		Status:  domain.StatusOpen,
+		Created: time.Now().UTC(),
+	}
+	require.NoError(s.T(), s.storage.Write(ticket))
+
+	list, err := s.storage.List()
+	require.NoError(s.T(), err)
+	require.Len(s.T(), list, 1)
+	require.Equal(s.T(), "tic-actual", list[0].ID)
+}
+
+func (s *StorageSuite) TestList_ReadError() {
+	// Create an invalid .md file that can't be parsed
+	invalidFile := filepath.Join(s.storage.TicketsDir(), "tic-invalid.md")
+	require.NoError(s.T(), os.WriteFile(invalidFile, []byte("not valid yaml frontmatter"), 0644))
+
+	list, err := s.storage.List()
+	require.Error(s.T(), err)
+	require.Nil(s.T(), list)
+}
+
 func (s *StorageSuite) TestDelete() {
 	ticket := &domain.Ticket{
 		ID:      "tic-del1",
@@ -173,6 +239,84 @@ func (s *StorageSuite) TestListIDs() {
 	require.Len(s.T(), ids, 2)
 	require.Contains(s.T(), ids, "tic-id1")
 	require.Contains(s.T(), ids, "tic-id2")
+}
+
+func (s *StorageSuite) TestListIDs_EmptyDirectory() {
+	ids, err := s.storage.ListIDs()
+	require.NoError(s.T(), err)
+	require.Len(s.T(), ids, 0)
+}
+
+func (s *StorageSuite) TestListIDs_NonExistentDirectory() {
+	storage := New(filepath.Join(s.tempDir, "nonexistent-ids"))
+	ids, err := storage.ListIDs()
+	require.NoError(s.T(), err)
+	require.Nil(s.T(), ids)
+}
+
+func (s *StorageSuite) TestListIDs_SkipsSubdirectories() {
+	// Create a subdirectory that looks like a ticket
+	subDir := filepath.Join(s.storage.TicketsDir(), "tic-subdir.md")
+	require.NoError(s.T(), os.MkdirAll(subDir, 0755))
+
+	// Create a real ticket
+	ticket := &domain.Ticket{
+		ID:      "tic-real-id",
+		Status:  domain.StatusOpen,
+		Created: time.Now().UTC(),
+	}
+	require.NoError(s.T(), s.storage.Write(ticket))
+
+	ids, err := s.storage.ListIDs()
+	require.NoError(s.T(), err)
+	require.Len(s.T(), ids, 1)
+	require.Contains(s.T(), ids, "tic-real-id")
+}
+
+func (s *StorageSuite) TestListIDs_SkipsNonMdFiles() {
+	// Create non-.md files
+	txtFile := filepath.Join(s.storage.TicketsDir(), "tic-nope.txt")
+	require.NoError(s.T(), os.WriteFile(txtFile, []byte("not a ticket"), 0644))
+
+	noExtFile := filepath.Join(s.storage.TicketsDir(), "README")
+	require.NoError(s.T(), os.WriteFile(noExtFile, []byte("readme"), 0644))
+
+	// Create a real ticket
+	ticket := &domain.Ticket{
+		ID:      "tic-valid-id",
+		Status:  domain.StatusOpen,
+		Created: time.Now().UTC(),
+	}
+	require.NoError(s.T(), s.storage.Write(ticket))
+
+	ids, err := s.storage.ListIDs()
+	require.NoError(s.T(), err)
+	require.Len(s.T(), ids, 1)
+	require.Contains(s.T(), ids, "tic-valid-id")
+}
+
+func (s *StorageSuite) TestListIDs_MixedContent() {
+	// Create multiple tickets
+	tickets := []*domain.Ticket{
+		{ID: "tic-one", Status: domain.StatusOpen, Created: time.Now().UTC()},
+		{ID: "tic-two", Status: domain.StatusClosed, Created: time.Now().UTC()},
+		{ID: "tic-three", Status: domain.StatusInProgress, Created: time.Now().UTC()},
+	}
+
+	for _, t := range tickets {
+		require.NoError(s.T(), s.storage.Write(t))
+	}
+
+	// Create junk files
+	require.NoError(s.T(), os.WriteFile(filepath.Join(s.storage.TicketsDir(), "junk.txt"), []byte("junk"), 0644))
+	require.NoError(s.T(), os.MkdirAll(filepath.Join(s.storage.TicketsDir(), "subdir"), 0755))
+
+	ids, err := s.storage.ListIDs()
+	require.NoError(s.T(), err)
+	require.Len(s.T(), ids, 3)
+	require.Contains(s.T(), ids, "tic-one")
+	require.Contains(s.T(), ids, "tic-two")
+	require.Contains(s.T(), ids, "tic-three")
 }
 
 func (s *StorageSuite) TestFindTicketsDir() {
@@ -298,4 +442,51 @@ func (s *StorageSuite) TestAtomicClaim_ConcurrentClaims() {
 	read, err := s.storage.Read("tic-race1")
 	require.NoError(s.T(), err)
 	require.Equal(s.T(), domain.StatusInProgress, read.Status)
+}
+
+func (s *StorageSuite) TestDelete_NonExistent() {
+	err := s.storage.Delete("nonexistent-ticket")
+	require.Error(s.T(), err)
+	require.Contains(s.T(), err.Error(), "failed to delete ticket")
+}
+
+func (s *StorageSuite) TestAtomicClaim_FileNotFound() {
+	_, err := s.storage.AtomicClaim("nonexistent-ticket")
+	require.Error(s.T(), err)
+	require.Contains(s.T(), err.Error(), "failed to open ticket file")
+}
+
+func (s *StorageSuite) TestResolveID_SkipsDirectories() {
+	// Create a directory with .md extension
+	dirPath := filepath.Join(s.storage.TicketsDir(), "tic-dir.md")
+	require.NoError(s.T(), os.MkdirAll(dirPath, 0755))
+
+	// Create a real ticket
+	ticket := &domain.Ticket{
+		ID:      "tic-real",
+		Status:  domain.StatusOpen,
+		Created: time.Now().UTC(),
+	}
+	require.NoError(s.T(), s.storage.Write(ticket))
+
+	// Should find real ticket, not the directory
+	resolved, err := s.storage.ResolveID("tic-real")
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), "tic-real", resolved)
+}
+
+func (s *StorageSuite) TestResolveID_SkipsNonMdFiles() {
+	// Create non-.md files
+	txtFile := filepath.Join(s.storage.TicketsDir(), "tic-txt.txt")
+	require.NoError(s.T(), os.WriteFile(txtFile, []byte("not a ticket"), 0644))
+
+	// Should not find the txt file
+	_, err := s.storage.ResolveID("tic-txt")
+	require.Error(s.T(), err)
+	require.Contains(s.T(), err.Error(), "ticket not found")
+}
+
+func (s *StorageSuite) TestRead_NotFound() {
+	_, err := s.storage.Read("nonexistent")
+	require.Error(s.T(), err)
 }

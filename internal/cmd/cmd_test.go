@@ -51,6 +51,13 @@ func (s *CmdSuite) SetupTest() {
 	createFlags.externalRef = ""
 	createFlags.parent = ""
 	createFlags.tags = nil
+	exportFlags.format = "json"
+	exportFlags.output = ""
+	importFlags.skipExisting = false
+	bulkFlags.tag = ""
+	bulkFlags.status = ""
+	bulkFlags.assignee = ""
+	bulkFlags.dryRun = false
 
 	s.cleanup = func() {
 		_ = os.RemoveAll(tempDir)
@@ -984,4 +991,394 @@ func (s *CmdSuite) TestLinkMultipleTickets() {
 	require.NoError(s.T(), err)
 	require.Contains(s.T(), t2.Links, "tic-mlink1")
 	require.Contains(s.T(), t2.Links, "tic-mlink3")
+}
+
+func (s *CmdSuite) TestExportCommandJSON() {
+	s.createTestTicket("tic-exp1", domain.StatusOpen, "Export Test 1")
+	s.createTestTicket("tic-exp2", domain.StatusClosed, "Export Test 2")
+
+	output, err := s.executeCommand("export")
+
+	require.NoError(s.T(), err)
+	require.Contains(s.T(), output, "tic-exp1")
+	require.Contains(s.T(), output, "tic-exp2")
+	require.Contains(s.T(), output, "Export Test 1")
+	require.Contains(s.T(), output, "Export Test 2")
+	// Should be valid JSON (contains brackets)
+	require.Contains(s.T(), output, "[")
+	require.Contains(s.T(), output, "]")
+}
+
+func (s *CmdSuite) TestExportCommandCSV() {
+	t1 := s.createTestTicket("tic-expcsv1", domain.StatusOpen, "CSV Export 1")
+	t1.Tags = []string{"tag1", "tag2"}
+	require.NoError(s.T(), store.Write(t1))
+
+	output, err := s.executeCommand("export", "--format=csv")
+
+	require.NoError(s.T(), err)
+	// Check CSV header
+	require.Contains(s.T(), output, "ID,Status,Type")
+	// Check data row
+	require.Contains(s.T(), output, "tic-expcsv1")
+	require.Contains(s.T(), output, "CSV Export 1")
+	// Tags should be semicolon-separated
+	require.Contains(s.T(), output, "tag1;tag2")
+}
+
+func (s *CmdSuite) TestExportCommandToFile() {
+	s.createTestTicket("tic-expfile", domain.StatusOpen, "File Export Test")
+
+	outputFile := filepath.Join(s.tempDir, "export.json")
+	_, err := s.executeCommand("export", "--output="+outputFile)
+
+	require.NoError(s.T(), err)
+
+	// Verify file was created
+	data, err := os.ReadFile(outputFile)
+	require.NoError(s.T(), err)
+	require.Contains(s.T(), string(data), "tic-expfile")
+	require.Contains(s.T(), string(data), "File Export Test")
+}
+
+func (s *CmdSuite) TestExportCommandInvalidFormat() {
+	_, err := s.executeCommand("export", "--format=xml")
+
+	require.Error(s.T(), err)
+	require.Contains(s.T(), err.Error(), "unsupported format")
+}
+
+func (s *CmdSuite) TestImportCommandJSON() {
+	// Create a JSON file with tickets to import
+	importData := `[
+		{
+			"ID": "tic-imp1",
+			"Status": "open",
+			"Type": "task",
+			"Priority": 1,
+			"Title": "Imported Ticket 1",
+			"Description": "Test import"
+		},
+		{
+			"ID": "tic-imp2",
+			"Status": "closed",
+			"Type": "bug",
+			"Priority": 0,
+			"Title": "Imported Ticket 2"
+		}
+	]`
+
+	importFile := filepath.Join(s.tempDir, "import.json")
+	err := os.WriteFile(importFile, []byte(importData), 0644)
+	require.NoError(s.T(), err)
+
+	output, err := s.executeCommand("import", importFile)
+
+	require.NoError(s.T(), err)
+	require.Contains(s.T(), output, "Imported 2 ticket(s)")
+
+	// Verify tickets were created
+	t1, err := store.Read("tic-imp1")
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), "Imported Ticket 1", t1.Title)
+	require.Equal(s.T(), domain.StatusOpen, t1.Status)
+	require.Equal(s.T(), 1, t1.Priority)
+
+	t2, err := store.Read("tic-imp2")
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), "Imported Ticket 2", t2.Title)
+	require.Equal(s.T(), domain.StatusClosed, t2.Status)
+	require.Equal(s.T(), domain.TypeBug, t2.Type)
+}
+
+func (s *CmdSuite) TestImportCommandSkipExisting() {
+	// Create an existing ticket
+	s.createTestTicket("tic-impskip", domain.StatusOpen, "Existing Ticket")
+
+	// Try to import a ticket with the same ID
+	importData := `[
+		{
+			"ID": "tic-impskip",
+			"Status": "closed",
+			"Title": "Should Be Skipped"
+		},
+		{
+			"ID": "tic-impnew",
+			"Status": "open",
+			"Title": "New Ticket"
+		}
+	]`
+
+	importFile := filepath.Join(s.tempDir, "import-skip.json")
+	err := os.WriteFile(importFile, []byte(importData), 0644)
+	require.NoError(s.T(), err)
+
+	output, err := s.executeCommand("import", importFile, "--skip-existing")
+
+	require.NoError(s.T(), err)
+	require.Contains(s.T(), output, "Imported 1 ticket(s)")
+	require.Contains(s.T(), output, "skipped 1 existing")
+
+	// Verify existing ticket was not modified
+	existing, err := store.Read("tic-impskip")
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), "Existing Ticket", existing.Title)
+	require.Equal(s.T(), domain.StatusOpen, existing.Status)
+
+	// Verify new ticket was created
+	newTicket, err := store.Read("tic-impnew")
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), "New Ticket", newTicket.Title)
+}
+
+func (s *CmdSuite) TestImportCommandConflictError() {
+	// Create an existing ticket
+	s.createTestTicket("tic-impconflict", domain.StatusOpen, "Existing Ticket")
+
+	// Try to import a ticket with the same ID without --skip-existing
+	importData := `[{"ID": "tic-impconflict", "Title": "Conflict"}]`
+
+	importFile := filepath.Join(s.tempDir, "import-conflict.json")
+	err := os.WriteFile(importFile, []byte(importData), 0644)
+	require.NoError(s.T(), err)
+
+	_, err = s.executeCommand("import", importFile)
+
+	require.Error(s.T(), err)
+	require.Contains(s.T(), err.Error(), "already exists")
+}
+
+func (s *CmdSuite) TestImportCommandGeneratesID() {
+	// Import ticket without ID
+	importData := `[{"Title": "No ID Ticket", "Status": "open"}]`
+
+	importFile := filepath.Join(s.tempDir, "import-noid.json")
+	err := os.WriteFile(importFile, []byte(importData), 0644)
+	require.NoError(s.T(), err)
+
+	output, err := s.executeCommand("import", importFile)
+
+	require.NoError(s.T(), err)
+	require.Contains(s.T(), output, "Imported 1 ticket(s)")
+	require.Contains(s.T(), output, "generated 1 ID(s)")
+}
+
+func (s *CmdSuite) TestImportCommandInvalidJSON() {
+	importFile := filepath.Join(s.tempDir, "invalid.json")
+	err := os.WriteFile(importFile, []byte("not valid json"), 0644)
+	require.NoError(s.T(), err)
+
+	_, err = s.executeCommand("import", importFile)
+
+	require.Error(s.T(), err)
+	require.Contains(s.T(), err.Error(), "failed to parse JSON")
+}
+
+func (s *CmdSuite) TestImportCommandFileNotFound() {
+	_, err := s.executeCommand("import", "/nonexistent/file.json")
+
+	require.Error(s.T(), err)
+	require.Contains(s.T(), err.Error(), "failed to read input")
+}
+
+func (s *CmdSuite) TestExportImportRoundTrip() {
+	// Create tickets with various fields
+	t1 := s.createTestTicket("tic-rt1", domain.StatusOpen, "Round Trip 1")
+	t1.Description = "Test description"
+	t1.Tags = []string{"backend", "api"}
+	t1.Priority = 1
+	t1.Assignee = "developer"
+	require.NoError(s.T(), store.Write(t1))
+
+	t2 := s.createTestTicket("tic-rt2", domain.StatusInProgress, "Round Trip 2")
+	t2.Type = domain.TypeBug
+	t2.Deps = []string{"tic-rt1"}
+	require.NoError(s.T(), store.Write(t2))
+
+	// Export to file
+	exportFile := filepath.Join(s.tempDir, "roundtrip.json")
+	_, err := s.executeCommand("export", "--output="+exportFile)
+	require.NoError(s.T(), err)
+
+	// Delete tickets
+	require.NoError(s.T(), store.Delete("tic-rt1"))
+	require.NoError(s.T(), store.Delete("tic-rt2"))
+
+	// Verify deleted
+	require.False(s.T(), store.Exists("tic-rt1"))
+	require.False(s.T(), store.Exists("tic-rt2"))
+
+	// Import back
+	output, err := s.executeCommand("import", exportFile)
+	require.NoError(s.T(), err)
+	require.Contains(s.T(), output, "Imported")
+
+	// Verify tickets restored
+	restored1, err := store.Read("tic-rt1")
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), "Round Trip 1", restored1.Title)
+	require.Equal(s.T(), "Test description", restored1.Description)
+	require.Equal(s.T(), []string{"backend", "api"}, restored1.Tags)
+	require.Equal(s.T(), 1, restored1.Priority)
+	require.Equal(s.T(), "developer", restored1.Assignee)
+
+	restored2, err := store.Read("tic-rt2")
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), "Round Trip 2", restored2.Title)
+	require.Equal(s.T(), domain.TypeBug, restored2.Type)
+	require.Equal(s.T(), domain.StatusInProgress, restored2.Status)
+	require.Equal(s.T(), []string{"tic-rt1"}, restored2.Deps)
+}
+
+func (s *CmdSuite) TestBulkCloseByTag() {
+	t1 := s.createTestTicket("tic-bulk1", domain.StatusOpen, "Bulk Test 1")
+	t1.Tags = []string{"sprint-1"}
+	require.NoError(s.T(), store.Write(t1))
+
+	t2 := s.createTestTicket("tic-bulk2", domain.StatusOpen, "Bulk Test 2")
+	t2.Tags = []string{"sprint-1"}
+	require.NoError(s.T(), store.Write(t2))
+
+	t3 := s.createTestTicket("tic-bulk3", domain.StatusOpen, "Bulk Test 3")
+	t3.Tags = []string{"sprint-2"}
+	require.NoError(s.T(), store.Write(t3))
+
+	output, err := s.executeCommand("bulk", "close", "--tag=sprint-1")
+
+	require.NoError(s.T(), err)
+	require.Contains(s.T(), output, "Successfully closed 2 ticket(s)")
+
+	// Verify tickets were closed
+	ticket1, _ := store.Read("tic-bulk1")
+	require.Equal(s.T(), domain.StatusClosed, ticket1.Status)
+
+	ticket2, _ := store.Read("tic-bulk2")
+	require.Equal(s.T(), domain.StatusClosed, ticket2.Status)
+
+	// Third ticket should still be open
+	ticket3, _ := store.Read("tic-bulk3")
+	require.Equal(s.T(), domain.StatusOpen, ticket3.Status)
+}
+
+func (s *CmdSuite) TestBulkStartByAssignee() {
+	t1 := s.createTestTicket("tic-bulkstart1", domain.StatusOpen, "Start Test 1")
+	t1.Assignee = "alice"
+	require.NoError(s.T(), store.Write(t1))
+
+	t2 := s.createTestTicket("tic-bulkstart2", domain.StatusOpen, "Start Test 2")
+	t2.Assignee = "alice"
+	require.NoError(s.T(), store.Write(t2))
+
+	t3 := s.createTestTicket("tic-bulkstart3", domain.StatusOpen, "Start Test 3")
+	t3.Assignee = "bob"
+	require.NoError(s.T(), store.Write(t3))
+
+	output, err := s.executeCommand("bulk", "start", "--assignee=alice")
+
+	require.NoError(s.T(), err)
+	require.Contains(s.T(), output, "Successfully started 2 ticket(s)")
+
+	// Verify tickets were started
+	ticket1, _ := store.Read("tic-bulkstart1")
+	require.Equal(s.T(), domain.StatusInProgress, ticket1.Status)
+
+	ticket2, _ := store.Read("tic-bulkstart2")
+	require.Equal(s.T(), domain.StatusInProgress, ticket2.Status)
+
+	// Third ticket should still be open
+	ticket3, _ := store.Read("tic-bulkstart3")
+	require.Equal(s.T(), domain.StatusOpen, ticket3.Status)
+}
+
+func (s *CmdSuite) TestBulkReopenByStatus() {
+	s.createTestTicket("tic-bulkreopen1", domain.StatusClosed, "Reopen Test 1")
+	s.createTestTicket("tic-bulkreopen2", domain.StatusClosed, "Reopen Test 2")
+	s.createTestTicket("tic-bulkreopen3", domain.StatusOpen, "Reopen Test 3")
+
+	output, err := s.executeCommand("bulk", "reopen", "--status=closed")
+
+	require.NoError(s.T(), err)
+	require.Contains(s.T(), output, "Successfully reopened 2 ticket(s)")
+
+	// Verify tickets were reopened
+	ticket1, _ := store.Read("tic-bulkreopen1")
+	require.Equal(s.T(), domain.StatusOpen, ticket1.Status)
+
+	ticket2, _ := store.Read("tic-bulkreopen2")
+	require.Equal(s.T(), domain.StatusOpen, ticket2.Status)
+}
+
+func (s *CmdSuite) TestBulkDryRun() {
+	t1 := s.createTestTicket("tic-bulkdry1", domain.StatusOpen, "Dry Run Test 1")
+	t1.Tags = []string{"test"}
+	require.NoError(s.T(), store.Write(t1))
+
+	t2 := s.createTestTicket("tic-bulkdry2", domain.StatusOpen, "Dry Run Test 2")
+	t2.Tags = []string{"test"}
+	require.NoError(s.T(), store.Write(t2))
+
+	output, err := s.executeCommand("bulk", "close", "--tag=test", "--dry-run")
+
+	require.NoError(s.T(), err)
+	require.Contains(s.T(), output, "Dry run: would closed 2 ticket(s)")
+	require.Contains(s.T(), output, "tic-bulkdry1")
+	require.Contains(s.T(), output, "tic-bulkdry2")
+
+	// Verify tickets were NOT closed
+	ticket1, _ := store.Read("tic-bulkdry1")
+	require.Equal(s.T(), domain.StatusOpen, ticket1.Status)
+
+	ticket2, _ := store.Read("tic-bulkdry2")
+	require.Equal(s.T(), domain.StatusOpen, ticket2.Status)
+}
+
+func (s *CmdSuite) TestBulkNoMatches() {
+	s.createTestTicket("tic-bulknomatch", domain.StatusOpen, "No Match Test")
+
+	output, err := s.executeCommand("bulk", "close", "--tag=nonexistent")
+
+	require.NoError(s.T(), err)
+	require.Contains(s.T(), output, "No tickets match the specified filters")
+}
+
+func (s *CmdSuite) TestBulkAlreadyInTargetStatus() {
+	s.createTestTicket("tic-bulkalready1", domain.StatusClosed, "Already Closed 1")
+	s.createTestTicket("tic-bulkalready2", domain.StatusClosed, "Already Closed 2")
+
+	output, err := s.executeCommand("bulk", "close", "--status=closed")
+
+	require.NoError(s.T(), err)
+	require.Contains(s.T(), output, "No tickets needed updating")
+}
+
+func (s *CmdSuite) TestBulkMultipleFilters() {
+	t1 := s.createTestTicket("tic-bulkmulti1", domain.StatusOpen, "Multi Filter 1")
+	t1.Tags = []string{"urgent"}
+	t1.Assignee = "alice"
+	require.NoError(s.T(), store.Write(t1))
+
+	t2 := s.createTestTicket("tic-bulkmulti2", domain.StatusOpen, "Multi Filter 2")
+	t2.Tags = []string{"urgent"}
+	t2.Assignee = "bob"
+	require.NoError(s.T(), store.Write(t2))
+
+	t3 := s.createTestTicket("tic-bulkmulti3", domain.StatusOpen, "Multi Filter 3")
+	t3.Tags = []string{"normal"}
+	t3.Assignee = "alice"
+	require.NoError(s.T(), store.Write(t3))
+
+	output, err := s.executeCommand("bulk", "close", "--tag=urgent", "--assignee=alice")
+
+	require.NoError(s.T(), err)
+	require.Contains(s.T(), output, "Successfully closed 1 ticket(s)")
+
+	// Only first ticket should be closed
+	ticket1, _ := store.Read("tic-bulkmulti1")
+	require.Equal(s.T(), domain.StatusClosed, ticket1.Status)
+
+	ticket2, _ := store.Read("tic-bulkmulti2")
+	require.Equal(s.T(), domain.StatusOpen, ticket2.Status)
+
+	ticket3, _ := store.Read("tic-bulkmulti3")
+	require.Equal(s.T(), domain.StatusOpen, ticket3.Status)
 }

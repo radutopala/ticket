@@ -16,12 +16,7 @@ var showCmd = &cobra.Command{
 	Long:  `Display the full contents of a ticket by ID. Supports partial ID matching.`,
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		id, err := store.ResolveID(args[0])
-		if err != nil {
-			return err
-		}
-
-		ticket, err := store.Read(id)
+		ticket, err := resolveAndReadTicket(args[0])
 		if err != nil {
 			return err
 		}
@@ -69,7 +64,7 @@ var showCmd = &cobra.Command{
 		}
 
 		// Get relationships using pre-loaded tickets
-		relationships := getTicketRelationships(id, ticket, allTickets)
+		relationships := getTicketRelationships(ticket.ID, ticket, allTickets)
 
 		return runWithPager(func(w io.Writer) error {
 			if _, err := fmt.Fprint(w, output); err != nil {

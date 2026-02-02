@@ -30,9 +30,9 @@ var createCmd = &cobra.Command{
 	Long:  `Create a new ticket with the specified title and options.`,
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Validate priority (0-4)
-		if createFlags.priority < 0 || createFlags.priority > 4 {
-			return fmt.Errorf("invalid priority %d: must be between 0 and 4 (0=highest)", createFlags.priority)
+		// Validate priority
+		if createFlags.priority < domain.MinPriority || createFlags.priority > domain.MaxPriority {
+			return fmt.Errorf("invalid priority %d: must be between %d and %d (%d=highest)", createFlags.priority, domain.MinPriority, domain.MaxPriority, domain.MinPriority)
 		}
 
 		// Validate parent exists if specified
@@ -110,7 +110,7 @@ func init() {
 	createCmd.Flags().StringVar(&createFlags.design, "design", "", "Design notes")
 	createCmd.Flags().StringVar(&createFlags.acceptance, "acceptance", "", "Acceptance criteria")
 	createCmd.Flags().StringVarP(&createFlags.ticketType, "type", "t", "task", "Type (bug|feature|task|epic|chore)")
-	createCmd.Flags().IntVarP(&createFlags.priority, "priority", "p", 2, "Priority 0-4, 0=highest")
+	createCmd.Flags().IntVarP(&createFlags.priority, "priority", "p", domain.DefaultPriority, fmt.Sprintf("Priority %d-%d, %d=highest", domain.MinPriority, domain.MaxPriority, domain.MinPriority))
 	createCmd.Flags().StringVarP(&createFlags.assignee, "assignee", "a", "", "Assignee")
 	createCmd.Flags().StringVar(&createFlags.externalRef, "external-ref", "", "External reference (e.g., gh-123, JIRA-456)")
 	createCmd.Flags().StringVar(&createFlags.parent, "parent", "", "Parent ticket ID")
