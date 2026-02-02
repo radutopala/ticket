@@ -16,6 +16,7 @@ type FilterOptions struct {
 	Status   string
 	Assignee string
 	Tag      string
+	Type     string
 }
 
 // SortOptions holds sorting options for list commands.
@@ -38,6 +39,9 @@ func (f FilterOptions) Matches(t *domain.Ticket) bool {
 	if f.Tag != "" && !hasTag(t.Tags, f.Tag) {
 		return false
 	}
+	if f.Type != "" && string(t.Type) != f.Type {
+		return false
+	}
 	return true
 }
 
@@ -48,7 +52,7 @@ var listCmd = &cobra.Command{
 	Use:     "list",
 	Aliases: []string{"ls"},
 	Short:   "List tickets",
-	Long: `List all tickets with optional filters for status, assignee, and tags.
+	Long: `List all tickets with optional filters for status, assignee, type, and tags.
 
 Sort options: priority (default), created, status, title`,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -239,22 +243,26 @@ func init() {
 	listCmd.Flags().StringVar(&listFlags.Status, "status", "", "Filter by status (open|in_progress|closed)")
 	listCmd.Flags().StringVarP(&listFlags.Assignee, "assignee", "a", "", "Filter by assignee")
 	listCmd.Flags().StringVarP(&listFlags.Tag, "tag", "T", "", "Filter by tag")
+	listCmd.Flags().StringVarP(&listFlags.Type, "type", "t", "", "Filter by type (task|bug|feature|epic|chore)")
 	listCmd.Flags().StringVarP(&sortFlags.SortBy, "sort", "s", "", "Sort by field (priority|created|status|title)")
 	listCmd.Flags().BoolVarP(&sortFlags.Reverse, "reverse", "r", false, "Reverse sort order")
 
 	readyCmd.Flags().StringVarP(&listFlags.Assignee, "assignee", "a", "", "Filter by assignee")
 	readyCmd.Flags().StringVarP(&listFlags.Tag, "tag", "T", "", "Filter by tag")
+	readyCmd.Flags().StringVarP(&listFlags.Type, "type", "t", "", "Filter by type (task|bug|feature|epic|chore)")
 	readyCmd.Flags().StringVarP(&sortFlags.SortBy, "sort", "s", "", "Sort by field (priority|created|status|title)")
 	readyCmd.Flags().BoolVarP(&sortFlags.Reverse, "reverse", "r", false, "Reverse sort order")
 
 	blockedCmd.Flags().StringVarP(&listFlags.Assignee, "assignee", "a", "", "Filter by assignee")
 	blockedCmd.Flags().StringVarP(&listFlags.Tag, "tag", "T", "", "Filter by tag")
+	blockedCmd.Flags().StringVarP(&listFlags.Type, "type", "t", "", "Filter by type (task|bug|feature|epic|chore)")
 	blockedCmd.Flags().StringVarP(&sortFlags.SortBy, "sort", "s", "", "Sort by field (priority|created|status|title)")
 	blockedCmd.Flags().BoolVarP(&sortFlags.Reverse, "reverse", "r", false, "Reverse sort order")
 
 	closedCmd.Flags().IntVar(&closedFlags.limit, "limit", 20, "Limit number of results")
 	closedCmd.Flags().StringVarP(&listFlags.Assignee, "assignee", "a", "", "Filter by assignee")
 	closedCmd.Flags().StringVarP(&listFlags.Tag, "tag", "T", "", "Filter by tag")
+	closedCmd.Flags().StringVarP(&listFlags.Type, "type", "t", "", "Filter by type (task|bug|feature|epic|chore)")
 	closedCmd.Flags().StringVarP(&sortFlags.SortBy, "sort", "s", "", "Sort by field (priority|created|status|title)")
 	closedCmd.Flags().BoolVarP(&sortFlags.Reverse, "reverse", "r", false, "Reverse sort order")
 }

@@ -73,22 +73,26 @@ Available Commands:
   status <id> <status>     Update ticket status (open|in_progress|closed)
   list                     List tickets (alias: ls)
     --status               Filter by status (open|in_progress|closed)
+    -t, --type             Filter by type (task|bug|feature|epic|chore)
     -a, --assignee         Filter by assignee
     -T, --tag              Filter by tag
     -s, --sort             Sort by field (priority|created|status|title)
     -r, --reverse          Reverse sort order
   ready                    List open/in_progress tickets with resolved deps
+    -t, --type             Filter by type (task|bug|feature|epic|chore)
     -a, --assignee         Filter by assignee
     -T, --tag              Filter by tag
     -s, --sort             Sort by field (priority|created|status|title)
     -r, --reverse          Reverse sort order
   blocked                  List open/in_progress tickets with unresolved deps
+    -t, --type             Filter by type (task|bug|feature|epic|chore)
     -a, --assignee         Filter by assignee
     -T, --tag              Filter by tag
     -s, --sort             Sort by field (priority|created|status|title)
     -r, --reverse          Reverse sort order
   closed                   List recently closed tickets
     --limit                Limit number of results [default: 20]
+    -t, --type             Filter by type (task|bug|feature|epic|chore)
     -a, --assignee         Filter by assignee
     -T, --tag              Filter by tag
     -s, --sort             Sort by field (priority|created|status|title)
