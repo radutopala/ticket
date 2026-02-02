@@ -190,9 +190,53 @@ All list commands support filters:
 - `--status <status>` - Filter by status
 - `-a, --assignee <name>` - Filter by assignee
 - `-T, --tag <tag>` - Filter by tag
+- `-s, --sort <field>` - Sort by field (priority\|created\|status\|title)
+- `-r, --reverse` - Reverse sort order
 - `--limit <n>` - Limit results (closed command only, default: 20)
 
-### Notes & Export
+### Search & Analysis
+
+| Command | Description |
+|---------|-------------|
+| `search <query>` | Full-text search in titles and descriptions |
+| `stats` | Display project metrics (counts by status, type, assignee) |
+
+Search options:
+- `--case-sensitive` - Perform case-sensitive search
+- `--status <status>` - Filter results by status
+
+Stats options:
+- `--json` - Output as JSON
+
+### Bulk Operations
+
+| Command | Description |
+|---------|-------------|
+| `bulk close` | Close multiple tickets |
+| `bulk reopen` | Reopen multiple tickets |
+| `bulk start` | Start multiple tickets |
+
+Bulk commands support filters:
+- `--tag <tag>` - Filter by tag
+- `--status <status>` - Filter by status
+- `-a, --assignee <name>` - Filter by assignee
+- `--dry-run` - Preview changes without applying
+
+### Import & Export
+
+| Command | Description |
+|---------|-------------|
+| `export` | Export tickets to JSON or CSV |
+| `import <file>` | Import tickets from JSON file |
+
+Export options:
+- `--format <format>` - Output format (json\|csv, default: json)
+- `-o, --output <file>` - Output file (default: stdout)
+
+Import options:
+- `--skip-existing` - Skip tickets that already exist
+
+### Notes & Query
 
 | Command | Description |
 |---------|-------------|
@@ -238,6 +282,35 @@ Timestamped note content.
 ```
 
 ## Notable Features
+
+### Full-Text Search
+
+Search across ticket titles and descriptions:
+
+```bash
+tk search "authentication"
+tk search "bug fix" --case-sensitive
+tk search "TODO" --status=open
+```
+
+### Project Statistics
+
+Get an overview of your project:
+
+```bash
+tk stats
+tk stats --json
+```
+
+### Bulk Operations
+
+Perform batch operations with filters:
+
+```bash
+tk bulk close --tag=sprint-1
+tk bulk start --assignee=agent-1
+tk bulk reopen --status=closed --tag=bug --dry-run
+```
 
 ### Partial ID Matching
 
