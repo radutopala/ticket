@@ -47,7 +47,7 @@ brew install radutopala/tap/tk
 
 ### Go Install
 
-Requires Go 1.25+:
+Requires Go 1.26+:
 
 ```bash
 go install github.com/radutopala/ticket/cmd/tk@latest
@@ -72,7 +72,7 @@ make build
 
 ## Requirements
 
-- Go 1.25+ (for building)
+- Go 1.26+ (for building)
 - `jq` (optional, for the `query` command filtering)
 - `$EDITOR` environment variable (for the `edit` command)
 
@@ -205,9 +205,6 @@ Search options:
 - `--case-sensitive` - Perform case-sensitive search
 - `--status <status>` - Filter results by status
 
-Stats options:
-- `--json` - Output as JSON
-
 ### Bulk Operations
 
 | Command | Description |
@@ -279,6 +276,21 @@ Design notes section.
 ### 2025-01-31T14:00:00Z
 
 Timestamped note content.
+```
+
+### Global `--json` Flag
+
+All commands support `--json` for structured JSON output:
+
+```bash
+tk create "My ticket" --json      # Returns full ticket object
+tk list --json                    # Returns array of tickets
+tk show <id> --json               # Returns single ticket
+tk start <id> --json              # Returns updated ticket
+tk dep check --json               # Returns {cycles, count}
+tk search "query" --json          # Returns array of search matches
+tk stats --json                   # Returns stats object
+tk version --json                 # Returns {version, commit, date}
 ```
 
 ## Notable Features
@@ -354,26 +366,56 @@ make install  # Install to $GOPATH/bin
 ### Test
 
 ```bash
-make test     # Run tests with race detection
+make test           # Run unit tests with race detection
+make test-component # Run component tests against the real binary
 ```
 
 ### Lint
 
 ```bash
-make lint     # Run golangci-lint
+make lint     # Run golangci-lint via Docker
+```
+
+## Library Usage
+
+The core types and store are importable from `pkg/ticket/`:
+
+```go
+import tk "github.com/radutopala/ticket/pkg/ticket"
+
+// Open the ticket store
+store := tk.OpenDir("/path/to/.tickets")
+
+// List and filter tickets
+tickets, _ := store.List()
+filtered := tk.Filter(tickets, tk.FilterOptions{Status: "open"})
+tk.Sort(filtered, tk.SortOptions{SortBy: "priority"})
+
+// Create and write a ticket
+ticket := &tk.Ticket{
+    ID:     "tic-abc1",
+    Title:  "Fix bug",
+    Status: tk.StatusOpen,
+    Type:   tk.TypeBug,
+}
+store.Write(ticket)
+
+// Dependency management
+tk.AddDep(ticket, "tic-dep1", allTickets) // cycle-safe
+cycles := tk.DetectCycles(allTickets)
 ```
 
 ## Project Structure
 
 ```
 .
-├── cmd/tk/           # Main entry point
+├── cmd/tk/             # Main entry point
 ├── internal/
-│   ├── cmd/          # CLI commands (Cobra)
-│   ├── config/       # Configuration
-│   ├── domain/       # Core data models
-│   └── storage/      # File I/O operations
-├── .tickets/         # Ticket storage directory
+│   ├── cmd/            # CLI commands (Cobra)
+│   └── config/         # Configuration
+├── pkg/ticket/         # Importable library (types, store, deps, search, stats)
+├── test/component/     # Component tests against the real binary
+├── .tickets/           # Ticket storage directory
 ├── Makefile
 └── go.mod
 ```
