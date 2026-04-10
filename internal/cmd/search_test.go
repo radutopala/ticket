@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/radutopala/ticket/internal/domain"
+	tk "github.com/radutopala/ticket/pkg/ticket"
 )
 
 type SearchSuite struct {
@@ -20,11 +20,11 @@ func TestSearchSuite(t *testing.T) {
 
 func (s *SearchSuite) TestSearchTickets() {
 	now := time.Now()
-	tickets := []*domain.Ticket{
-		{ID: "t1", Status: domain.StatusOpen, Title: "Fix authentication bug", Description: "Users cannot login", Created: now},
-		{ID: "t2", Status: domain.StatusInProgress, Title: "Add new feature", Description: "Implement authentication flow", Created: now},
-		{ID: "t3", Status: domain.StatusClosed, Title: "Update documentation", Description: "Add API docs", Created: now},
-		{ID: "t4", Status: domain.StatusOpen, Title: "Refactor code", Description: "Clean up the auth module", Created: now},
+	tickets := []*tk.Ticket{
+		{ID: "t1", Status: tk.StatusOpen, Title: "Fix authentication bug", Description: "Users cannot login", Created: now},
+		{ID: "t2", Status: tk.StatusInProgress, Title: "Add new feature", Description: "Implement authentication flow", Created: now},
+		{ID: "t3", Status: tk.StatusClosed, Title: "Update documentation", Description: "Add API docs", Created: now},
+		{ID: "t4", Status: tk.StatusOpen, Title: "Refactor code", Description: "Clean up the auth module", Created: now},
 	}
 
 	tests := []struct {
@@ -77,11 +77,11 @@ func (s *SearchSuite) TestSearchTickets() {
 
 	for _, tt := range tests {
 		s.Run(tt.name, func() {
-			matches := searchTickets(tickets, tt.query, tt.caseSensitive, tt.statusFilter)
+			matches := tk.Search(tickets, tt.query, tt.caseSensitive, tt.statusFilter)
 
 			var ids []string
 			for _, m := range matches {
-				ids = append(ids, m.ticket.ID)
+				ids = append(ids, m.Ticket.ID)
 			}
 
 			require.Equal(s.T(), tt.wantIDs, ids)
@@ -91,20 +91,20 @@ func (s *SearchSuite) TestSearchTickets() {
 
 func (s *SearchSuite) TestSearchTicketsContextExtraction() {
 	now := time.Now()
-	tickets := []*domain.Ticket{
+	tickets := []*tk.Ticket{
 		{
 			ID:          "t1",
-			Status:      domain.StatusOpen,
+			Status:      tk.StatusOpen,
 			Title:       "Simple title",
 			Description: "This is a longer description that contains the search term somewhere in the middle of the text",
 			Created:     now,
 		},
 	}
 
-	matches := searchTickets(tickets, "search term", false, "")
+	matches := tk.Search(tickets, "search term", false, "")
 	require.Len(s.T(), matches, 1)
-	require.NotEmpty(s.T(), matches[0].context)
-	require.Contains(s.T(), matches[0].context, "search term")
+	require.NotEmpty(s.T(), matches[0].Context)
+	require.Contains(s.T(), matches[0].Context, "search term")
 }
 
 func (s *SearchSuite) TestExtractContext() {
@@ -144,26 +144,8 @@ func (s *SearchSuite) TestExtractContext() {
 
 	for _, tt := range tests {
 		s.Run(tt.name, func() {
-			result := extractContext(tt.text, tt.matchIdx, tt.matchLen, tt.contextLen)
+			result := tk.ExtractContext(tt.text, tt.matchIdx, tt.matchLen, tt.contextLen)
 			require.GreaterOrEqual(s.T(), len(result), tt.wantLen)
 		})
 	}
-}
-
-func (s *SearchSuite) TestSortSearchMatchesByPriority() {
-	matches := []searchMatch{
-		{ticket: &domain.Ticket{ID: "t3", Priority: 3}},
-		{ticket: &domain.Ticket{ID: "t1", Priority: 1}},
-		{ticket: &domain.Ticket{ID: "t2", Priority: 2}},
-		{ticket: &domain.Ticket{ID: "t0", Priority: 1}},
-	}
-
-	sortSearchMatchesByPriority(matches)
-
-	var ids []string
-	for _, m := range matches {
-		ids = append(ids, m.ticket.ID)
-	}
-
-	require.Equal(s.T(), []string{"t0", "t1", "t2", "t3"}, ids)
 }

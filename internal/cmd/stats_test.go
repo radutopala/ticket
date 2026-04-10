@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/radutopala/ticket/internal/domain"
+	tk "github.com/radutopala/ticket/pkg/ticket"
 )
 
 type StatsSuite struct {
@@ -24,13 +24,13 @@ func (s *StatsSuite) TestComputeStats() {
 	now := time.Now()
 	tests := []struct {
 		name    string
-		tickets []*domain.Ticket
-		want    Stats
+		tickets []*tk.Ticket
+		want    tk.Stats
 	}{
 		{
 			name:    "empty tickets",
-			tickets: []*domain.Ticket{},
-			want: Stats{
+			tickets: []*tk.Ticket{},
+			want: tk.Stats{
 				Total:      0,
 				ByStatus:   map[string]int{},
 				ByType:     map[string]int{},
@@ -39,10 +39,10 @@ func (s *StatsSuite) TestComputeStats() {
 		},
 		{
 			name: "single ticket",
-			tickets: []*domain.Ticket{
-				{ID: "t1", Status: domain.StatusOpen, Type: domain.TypeTask, Assignee: "alice", Created: now},
+			tickets: []*tk.Ticket{
+				{ID: "t1", Status: tk.StatusOpen, Type: tk.TypeTask, Assignee: "alice", Created: now},
 			},
-			want: Stats{
+			want: tk.Stats{
 				Total:      1,
 				ByStatus:   map[string]int{"open": 1},
 				ByType:     map[string]int{"task": 1},
@@ -51,14 +51,14 @@ func (s *StatsSuite) TestComputeStats() {
 		},
 		{
 			name: "multiple tickets with various attributes",
-			tickets: []*domain.Ticket{
-				{ID: "t1", Status: domain.StatusOpen, Type: domain.TypeTask, Assignee: "alice", Created: now},
-				{ID: "t2", Status: domain.StatusOpen, Type: domain.TypeBug, Assignee: "bob", Created: now},
-				{ID: "t3", Status: domain.StatusInProgress, Type: domain.TypeFeature, Assignee: "alice", Created: now},
-				{ID: "t4", Status: domain.StatusClosed, Type: domain.TypeTask, Assignee: "charlie", Created: now},
-				{ID: "t5", Status: domain.StatusClosed, Type: domain.TypeBug, Created: now}, // unassigned
+			tickets: []*tk.Ticket{
+				{ID: "t1", Status: tk.StatusOpen, Type: tk.TypeTask, Assignee: "alice", Created: now},
+				{ID: "t2", Status: tk.StatusOpen, Type: tk.TypeBug, Assignee: "bob", Created: now},
+				{ID: "t3", Status: tk.StatusInProgress, Type: tk.TypeFeature, Assignee: "alice", Created: now},
+				{ID: "t4", Status: tk.StatusClosed, Type: tk.TypeTask, Assignee: "charlie", Created: now},
+				{ID: "t5", Status: tk.StatusClosed, Type: tk.TypeBug, Created: now}, // unassigned
 			},
-			want: Stats{
+			want: tk.Stats{
 				Total: 5,
 				ByStatus: map[string]int{
 					"open":        2,
@@ -80,11 +80,11 @@ func (s *StatsSuite) TestComputeStats() {
 		},
 		{
 			name: "tickets without type",
-			tickets: []*domain.Ticket{
-				{ID: "t1", Status: domain.StatusOpen, Assignee: "alice", Created: now},
-				{ID: "t2", Status: domain.StatusOpen, Type: domain.TypeTask, Assignee: "alice", Created: now},
+			tickets: []*tk.Ticket{
+				{ID: "t1", Status: tk.StatusOpen, Assignee: "alice", Created: now},
+				{ID: "t2", Status: tk.StatusOpen, Type: tk.TypeTask, Assignee: "alice", Created: now},
 			},
-			want: Stats{
+			want: tk.Stats{
 				Total:      2,
 				ByStatus:   map[string]int{"open": 2},
 				ByType:     map[string]int{"task": 1},
@@ -95,7 +95,7 @@ func (s *StatsSuite) TestComputeStats() {
 
 	for _, tt := range tests {
 		s.Run(tt.name, func() {
-			got := computeStats(tt.tickets)
+			got := tk.ComputeStats(tt.tickets)
 			require.Equal(s.T(), tt.want.Total, got.Total)
 			require.Equal(s.T(), tt.want.ByStatus, got.ByStatus)
 			require.Equal(s.T(), tt.want.ByType, got.ByType)
@@ -105,7 +105,7 @@ func (s *StatsSuite) TestComputeStats() {
 }
 
 func (s *StatsSuite) TestOutputStatsJSON() {
-	stats := Stats{
+	stats := tk.Stats{
 		Total: 3,
 		ByStatus: map[string]int{
 			"open":   2,
@@ -125,7 +125,7 @@ func (s *StatsSuite) TestOutputStatsJSON() {
 	err := outputStatsJSON(&buf, stats)
 	require.NoError(s.T(), err)
 
-	var got Stats
+	var got tk.Stats
 	err = json.Unmarshal(buf.Bytes(), &got)
 	require.NoError(s.T(), err)
 
@@ -136,7 +136,7 @@ func (s *StatsSuite) TestOutputStatsJSON() {
 }
 
 func (s *StatsSuite) TestOutputStatsText() {
-	stats := Stats{
+	stats := tk.Stats{
 		Total: 5,
 		ByStatus: map[string]int{
 			"open":        2,
@@ -161,22 +161,15 @@ func (s *StatsSuite) TestOutputStatsText() {
 
 	output := buf.String()
 
-	// Check total
 	require.Contains(s.T(), output, "Total: 5 tickets")
-
-	// Check status section
 	require.Contains(s.T(), output, "By Status:")
 	require.Contains(s.T(), output, "open:")
 	require.Contains(s.T(), output, "in_progress:")
 	require.Contains(s.T(), output, "closed:")
-
-	// Check type section
 	require.Contains(s.T(), output, "By Type:")
 	require.Contains(s.T(), output, "task:")
 	require.Contains(s.T(), output, "bug:")
 	require.Contains(s.T(), output, "feature:")
-
-	// Check assignee section
 	require.Contains(s.T(), output, "By Assignee:")
 	require.Contains(s.T(), output, "alice:")
 	require.Contains(s.T(), output, "bob:")

@@ -99,7 +99,7 @@ func getLatestVersion() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusFound && resp.StatusCode != http.StatusMovedPermanently {
 		return "", fmt.Errorf("unexpected status: %d", resp.StatusCode)
@@ -118,11 +118,6 @@ func getLatestVersion() (string, error) {
 func downloadAndReplace(version, exePath string) error {
 	// Construct download URL
 	arch := runtime.GOARCH
-	if arch == "amd64" {
-		// Keep as-is
-	} else if arch == "arm64" {
-		// Keep as-is
-	}
 
 	var ext string
 	if runtime.GOOS == "windows" {
@@ -140,7 +135,7 @@ func downloadAndReplace(version, exePath string) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("download failed: %s", resp.Status)
@@ -181,7 +176,7 @@ func downloadAndReplace(version, exePath string) error {
 
 	if err := os.Rename(tmpPath, exePath); err != nil {
 		// Try to restore old binary
-		os.Rename(oldPath, exePath)
+		_ = os.Rename(oldPath, exePath)
 		return err
 	}
 
@@ -196,7 +191,7 @@ func extractTarGz(r io.Reader, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	defer gzr.Close()
+	defer func() { _ = gzr.Close() }()
 
 	tr := tar.NewReader(gzr)
 	for {
@@ -237,7 +232,7 @@ func extractZip(r io.Reader, w io.Writer) error {
 			if err != nil {
 				return err
 			}
-			defer rc.Close()
+			defer func() { _ = rc.Close() }()
 			_, err = io.Copy(w, rc)
 			return err
 		}

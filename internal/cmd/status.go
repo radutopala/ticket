@@ -3,7 +3,7 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/radutopala/ticket/internal/domain"
+	tk "github.com/radutopala/ticket/pkg/ticket"
 )
 
 var statusCmd = &cobra.Command{
@@ -12,10 +12,10 @@ var statusCmd = &cobra.Command{
 	Long:  `Update the ticket status. Valid statuses: open, in_progress, closed. Supports partial ID matching.`,
 	Args:  cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		newStatus, err := domain.ParseStatus(args[1])
+		newStatus, err := tk.ParseStatus(args[1])
 		if err != nil {
 			return err
 		}
-		return updateTicketStatus(args[0], newStatus)
+		return updateTicketStatus(cmd, args[0], newStatus)
 	},
 }

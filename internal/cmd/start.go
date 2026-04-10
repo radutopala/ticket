@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/radutopala/ticket/internal/storage"
+	tk "github.com/radutopala/ticket/pkg/ticket"
 )
 
 var startCmd = &cobra.Command{
@@ -22,10 +22,14 @@ var startCmd = &cobra.Command{
 
 		ticket, err := store.AtomicClaim(id)
 		if err != nil {
-			if errors.Is(err, storage.ErrAlreadyClaimed) {
+			if errors.Is(err, tk.ErrAlreadyClaimed) {
 				return fmt.Errorf("cannot claim %s: %w", id, err)
 			}
 			return fmt.Errorf("failed to claim ticket: %w", err)
+		}
+
+		if jsonOutput {
+			return outputJSON(cmd, ticket)
 		}
 
 		fmt.Printf("Claimed %s -> in_progress\n", ticket.ID)

@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/radutopala/ticket/internal/domain"
+	tk "github.com/radutopala/ticket/pkg/ticket"
 )
 
 type ListSuite struct {
@@ -59,7 +59,7 @@ func (s *ListSuite) TestHasTag() {
 
 	for _, tt := range tests {
 		s.Run(tt.name, func() {
-			result := hasTag(tt.tags, tt.tag)
+			result := tk.HasTag(tt.tags, tt.tag)
 			require.Equal(s.T(), tt.expected, result)
 		})
 	}
@@ -67,19 +67,19 @@ func (s *ListSuite) TestHasTag() {
 
 func (s *ListSuite) TestFilterTickets() {
 	now := time.Now()
-	tickets := []*domain.Ticket{
-		{ID: "t1", Status: domain.StatusOpen, Assignee: "alice", Tags: []string{"backend"}, Created: now},
-		{ID: "t2", Status: domain.StatusInProgress, Assignee: "bob", Tags: []string{"frontend"}, Created: now},
-		{ID: "t3", Status: domain.StatusClosed, Assignee: "alice", Tags: []string{"backend", "urgent"}, Created: now},
-		{ID: "t4", Status: domain.StatusOpen, Assignee: "charlie", Tags: []string{"api"}, Created: now},
+	tickets := []*tk.Ticket{
+		{ID: "t1", Status: tk.StatusOpen, Assignee: "alice", Tags: []string{"backend"}, Created: now},
+		{ID: "t2", Status: tk.StatusInProgress, Assignee: "bob", Tags: []string{"frontend"}, Created: now},
+		{ID: "t3", Status: tk.StatusClosed, Assignee: "alice", Tags: []string{"backend", "urgent"}, Created: now},
+		{ID: "t4", Status: tk.StatusOpen, Assignee: "charlie", Tags: []string{"api"}, Created: now},
 	}
 
 	tests := []struct {
-		name      string
-		status    string
-		assignee  string
-		tag       string
-		wantIDs   []string
+		name     string
+		status   string
+		assignee string
+		tag      string
+		wantIDs  []string
 	}{
 		{
 			name:    "no filters",
@@ -127,12 +127,12 @@ func (s *ListSuite) TestFilterTickets() {
 
 	for _, tt := range tests {
 		s.Run(tt.name, func() {
-			opts := FilterOptions{
+			opts := tk.FilterOptions{
 				Status:   tt.status,
 				Assignee: tt.assignee,
 				Tag:      tt.tag,
 			}
-			result := filterTickets(tickets, opts)
+			result := tk.Filter(tickets, opts)
 
 			var ids []string
 			for _, t := range result {
@@ -147,12 +147,12 @@ func (s *ListSuite) TestFilterTickets() {
 func (s *ListSuite) TestSortTicketsDefaultPriority() {
 	tests := []struct {
 		name    string
-		tickets []*domain.Ticket
+		tickets []*tk.Ticket
 		wantIDs []string
 	}{
 		{
 			name: "sort by priority ascending",
-			tickets: []*domain.Ticket{
+			tickets: []*tk.Ticket{
 				{ID: "t3", Priority: 3},
 				{ID: "t1", Priority: 1},
 				{ID: "t2", Priority: 2},
@@ -161,7 +161,7 @@ func (s *ListSuite) TestSortTicketsDefaultPriority() {
 		},
 		{
 			name: "same priority sort by ID",
-			tickets: []*domain.Ticket{
+			tickets: []*tk.Ticket{
 				{ID: "c", Priority: 1},
 				{ID: "a", Priority: 1},
 				{ID: "b", Priority: 1},
@@ -170,7 +170,7 @@ func (s *ListSuite) TestSortTicketsDefaultPriority() {
 		},
 		{
 			name: "mixed priority and ID",
-			tickets: []*domain.Ticket{
+			tickets: []*tk.Ticket{
 				{ID: "t2", Priority: 2},
 				{ID: "t3", Priority: 1},
 				{ID: "t1", Priority: 2},
@@ -180,18 +180,17 @@ func (s *ListSuite) TestSortTicketsDefaultPriority() {
 		},
 		{
 			name:    "empty list",
-			tickets: []*domain.Ticket{},
+			tickets: []*tk.Ticket{},
 			wantIDs: nil,
 		},
 	}
 
 	for _, tt := range tests {
 		s.Run(tt.name, func() {
-			// Make a copy to avoid mutating original
-			tickets := make([]*domain.Ticket, len(tt.tickets))
+			tickets := make([]*tk.Ticket, len(tt.tickets))
 			copy(tickets, tt.tickets)
 
-			sortTickets(tickets, SortOptions{})
+			tk.Sort(tickets, tk.SortOptions{})
 
 			var ids []string
 			for _, t := range tickets {
@@ -205,10 +204,10 @@ func (s *ListSuite) TestSortTicketsDefaultPriority() {
 
 func (s *ListSuite) TestSortTickets() {
 	now := time.Now()
-	tickets := []*domain.Ticket{
-		{ID: "t1", Priority: 2, Status: domain.StatusOpen, Title: "Beta feature", Created: now.Add(-3 * time.Hour)},
-		{ID: "t2", Priority: 1, Status: domain.StatusClosed, Title: "Alpha bug", Created: now.Add(-1 * time.Hour)},
-		{ID: "t3", Priority: 3, Status: domain.StatusInProgress, Title: "Gamma task", Created: now.Add(-2 * time.Hour)},
+	tickets := []*tk.Ticket{
+		{ID: "t1", Priority: 2, Status: tk.StatusOpen, Title: "Beta feature", Created: now.Add(-3 * time.Hour)},
+		{ID: "t2", Priority: 1, Status: tk.StatusClosed, Title: "Alpha bug", Created: now.Add(-1 * time.Hour)},
+		{ID: "t3", Priority: 3, Status: tk.StatusInProgress, Title: "Gamma task", Created: now.Add(-2 * time.Hour)},
 	}
 
 	tests := []struct {
@@ -264,11 +263,10 @@ func (s *ListSuite) TestSortTickets() {
 
 	for _, tt := range tests {
 		s.Run(tt.name, func() {
-			// Make a copy to avoid mutating original
-			ticketsCopy := make([]*domain.Ticket, len(tickets))
+			ticketsCopy := make([]*tk.Ticket, len(tickets))
 			copy(ticketsCopy, tickets)
 
-			sortTickets(ticketsCopy, SortOptions{SortBy: tt.sortBy, Reverse: tt.reverse})
+			tk.Sort(ticketsCopy, tk.SortOptions{SortBy: tt.sortBy, Reverse: tt.reverse})
 
 			var ids []string
 			for _, t := range ticketsCopy {

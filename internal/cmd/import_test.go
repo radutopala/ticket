@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/radutopala/ticket/internal/domain"
+	tk "github.com/radutopala/ticket/pkg/ticket"
 )
 
 type ImportSuite struct {
@@ -22,11 +22,11 @@ func (s *ImportSuite) TestConvertImportTicketValidStatuses() {
 	testCases := []struct {
 		name           string
 		status         string
-		expectedStatus domain.Status
+		expectedStatus tk.Status
 	}{
-		{"open status", "open", domain.StatusOpen},
-		{"in_progress status", "in_progress", domain.StatusInProgress},
-		{"closed status", "closed", domain.StatusClosed},
+		{"open status", "open", tk.StatusOpen},
+		{"in_progress status", "in_progress", tk.StatusInProgress},
+		{"closed status", "closed", tk.StatusClosed},
 	}
 
 	for _, tc := range testCases {
@@ -55,7 +55,7 @@ func (s *ImportSuite) TestConvertImportTicketEmptyStatusDefaultsToOpen() {
 	result, err := convertImportTicket(input)
 
 	require.NoError(s.T(), err)
-	require.Equal(s.T(), domain.StatusOpen, result.Status)
+	require.Equal(s.T(), tk.StatusOpen, result.Status)
 }
 
 func (s *ImportSuite) TestConvertImportTicketInvalidStatus() {
@@ -76,13 +76,13 @@ func (s *ImportSuite) TestConvertImportTicketValidTypes() {
 	testCases := []struct {
 		name         string
 		ticketType   string
-		expectedType domain.Type
+		expectedType tk.Type
 	}{
-		{"task type", "task", domain.TypeTask},
-		{"bug type", "bug", domain.TypeBug},
-		{"feature type", "feature", domain.TypeFeature},
-		{"epic type", "epic", domain.TypeEpic},
-		{"chore type", "chore", domain.TypeChore},
+		{"task type", "task", tk.TypeTask},
+		{"bug type", "bug", tk.TypeBug},
+		{"feature type", "feature", tk.TypeFeature},
+		{"epic type", "epic", tk.TypeEpic},
+		{"chore type", "chore", tk.TypeChore},
 	}
 
 	for _, tc := range testCases {
@@ -111,7 +111,7 @@ func (s *ImportSuite) TestConvertImportTicketEmptyTypeDefaultsToTask() {
 	result, err := convertImportTicket(input)
 
 	require.NoError(s.T(), err)
-	require.Equal(s.T(), domain.TypeTask, result.Type)
+	require.Equal(s.T(), tk.TypeTask, result.Type)
 }
 
 func (s *ImportSuite) TestConvertImportTicketInvalidType() {
@@ -220,8 +220,8 @@ func (s *ImportSuite) TestConvertImportTicketAllFieldsCopied() {
 
 	require.NoError(s.T(), err)
 	require.Equal(s.T(), "tic-full", result.ID)
-	require.Equal(s.T(), domain.StatusInProgress, result.Status)
-	require.Equal(s.T(), domain.TypeFeature, result.Type)
+	require.Equal(s.T(), tk.StatusInProgress, result.Status)
+	require.Equal(s.T(), tk.TypeFeature, result.Type)
 	require.Equal(s.T(), 1, result.Priority)
 	require.Equal(s.T(), "developer", result.Assignee)
 	require.Equal(s.T(), "tic-parent", result.Parent)
@@ -245,8 +245,8 @@ func (s *ImportSuite) TestConvertImportTicketMinimalInput() {
 
 	require.NoError(s.T(), err)
 	require.Equal(s.T(), "tic-minimal", result.ID)
-	require.Equal(s.T(), domain.StatusOpen, result.Status)
-	require.Equal(s.T(), domain.TypeTask, result.Type)
+	require.Equal(s.T(), tk.StatusOpen, result.Status)
+	require.Equal(s.T(), tk.TypeTask, result.Type)
 	require.Equal(s.T(), 0, result.Priority)
 	require.Empty(s.T(), result.Assignee)
 	require.Empty(s.T(), result.Title)

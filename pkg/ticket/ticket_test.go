@@ -1,4 +1,4 @@
-package domain
+package ticket
 
 import (
 	"testing"
@@ -173,14 +173,14 @@ func (s *TicketSuite) TestParseInvalidFrontmatter() {
 
 func (s *TicketSuite) TestRender() {
 	ticket := &Ticket{
-		ID:       "tic-test1",
-		Status:   StatusInProgress,
-		Type:     TypeFeature,
-		Priority: 1,
-		Assignee: "Jane Doe",
-		Deps:     []string{"tic-dep1"},
-		Created:  time.Date(2026, 1, 31, 10, 0, 0, 0, time.UTC),
-		Title:    "Feature Title",
+		ID:          "tic-test1",
+		Status:      StatusInProgress,
+		Type:        TypeFeature,
+		Priority:    1,
+		Assignee:    "Jane Doe",
+		Deps:        []string{"tic-dep1"},
+		Created:     time.Date(2026, 1, 31, 10, 0, 0, 0, time.UTC),
+		Title:       "Feature Title",
 		Description: "Feature description.",
 		Design:      "Design details.",
 		Acceptance:  "- [ ] Accept this",
@@ -209,16 +209,16 @@ func (s *TicketSuite) TestRender() {
 
 func (s *TicketSuite) TestRoundTrip() {
 	original := &Ticket{
-		ID:       "tic-round1",
-		Status:   StatusOpen,
-		Type:     TypeBug,
-		Priority: 3,
-		Assignee: "Developer",
-		Tags:     []string{"urgent", "backend"},
-		Deps:     []string{"tic-dep1", "tic-dep2"},
-		Links:    []string{"tic-link1"},
-		Created:  time.Date(2026, 1, 31, 10, 0, 0, 0, time.UTC),
-		Title:    "Bug Title",
+		ID:          "tic-round1",
+		Status:      StatusOpen,
+		Type:        TypeBug,
+		Priority:    3,
+		Assignee:    "Developer",
+		Tags:        []string{"urgent", "backend"},
+		Deps:        []string{"tic-dep1", "tic-dep2"},
+		Links:       []string{"tic-link1"},
+		Created:     time.Date(2026, 1, 31, 10, 0, 0, 0, time.UTC),
+		Title:       "Bug Title",
 		Description: "Bug description with details.",
 		Design:      "Fix approach.",
 		Acceptance:  "- [ ] Bug is fixed\n- [ ] Tests pass",
@@ -241,6 +241,34 @@ func (s *TicketSuite) TestRoundTrip() {
 	require.Equal(s.T(), original.Title, parsed.Title)
 }
 
+func (s *TicketSuite) TestValidatePriority() {
+	tests := []struct {
+		name     string
+		priority int
+		wantErr  bool
+	}{
+		{name: "min valid", priority: MinPriority, wantErr: false},
+		{name: "max valid", priority: MaxPriority, wantErr: false},
+		{name: "default valid", priority: DefaultPriority, wantErr: false},
+		{name: "below min", priority: MinPriority - 1, wantErr: true},
+		{name: "above max", priority: MaxPriority + 1, wantErr: true},
+		{name: "very negative", priority: -100, wantErr: true},
+		{name: "very large", priority: 999, wantErr: true},
+	}
+
+	for _, tt := range tests {
+		s.Run(tt.name, func() {
+			err := ValidatePriority(tt.priority)
+			if tt.wantErr {
+				require.Error(s.T(), err)
+				require.Contains(s.T(), err.Error(), "invalid priority")
+			} else {
+				require.NoError(s.T(), err)
+			}
+		})
+	}
+}
+
 func TestTitlePreservationAfterStatusChange(t *testing.T) {
 	content := `---
 id: test-1234
@@ -256,23 +284,16 @@ created: 2026-01-31T17:10:46.21915Z
 `
 	ticket, err := Parse([]byte(content))
 	require.NoError(t, err)
-	
-	t.Logf("Title after parse: %q", ticket.Title)
-	t.Logf("Description after parse: %q", ticket.Description)
-	
 	require.Equal(t, "My Test Title", ticket.Title, "Title should be preserved after parse")
-	
+
 	// Simulate status change
 	ticket.Status = StatusInProgress
-	
+
 	rendered, err := ticket.Render()
 	require.NoError(t, err)
-	
-	t.Logf("Rendered:\n%s", rendered)
-	
+
 	// Parse again
 	ticket2, err := Parse(rendered)
 	require.NoError(t, err)
-	
 	require.Equal(t, "My Test Title", ticket2.Title, "Title should be preserved after render and re-parse")
 }

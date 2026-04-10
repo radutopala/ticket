@@ -8,16 +8,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/radutopala/ticket/internal/domain"
+	tk "github.com/radutopala/ticket/pkg/ticket"
 )
-
-// Stats holds aggregated ticket statistics.
-type Stats struct {
-	Total      int            `json:"total"`
-	ByStatus   map[string]int `json:"by_status"`
-	ByType     map[string]int `json:"by_type"`
-	ByAssignee map[string]int `json:"by_assignee"`
-}
 
 var statsFlags struct {
 	json bool
@@ -39,9 +31,9 @@ Examples:
 			return err
 		}
 
-		stats := computeStats(tickets)
+		stats := tk.ComputeStats(tickets)
 
-		if statsFlags.json {
+		if statsFlags.json || jsonOutput {
 			return outputStatsJSON(cmd.OutOrStdout(), stats)
 		}
 
@@ -51,32 +43,7 @@ Examples:
 	},
 }
 
-func computeStats(tickets []*domain.Ticket) Stats {
-	stats := Stats{
-		Total:      len(tickets),
-		ByStatus:   make(map[string]int),
-		ByType:     make(map[string]int),
-		ByAssignee: make(map[string]int),
-	}
-
-	for _, t := range tickets {
-		stats.ByStatus[string(t.Status)]++
-
-		if t.Type != "" {
-			stats.ByType[string(t.Type)]++
-		}
-
-		assignee := t.Assignee
-		if assignee == "" {
-			assignee = "unassigned"
-		}
-		stats.ByAssignee[assignee]++
-	}
-
-	return stats
-}
-
-func outputStatsJSON(w io.Writer, stats Stats) error {
+func outputStatsJSON(w io.Writer, stats tk.Stats) error {
 	data, err := json.MarshalIndent(stats, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal stats: %w", err)
@@ -85,7 +52,7 @@ func outputStatsJSON(w io.Writer, stats Stats) error {
 	return err
 }
 
-func outputStatsText(w io.Writer, stats Stats) error {
+func outputStatsText(w io.Writer, stats tk.Stats) error {
 	if _, err := fmt.Fprintf(w, "Total: %d tickets\n\n", stats.Total); err != nil {
 		return err
 	}
@@ -94,7 +61,7 @@ func outputStatsText(w io.Writer, stats Stats) error {
 	if _, err := fmt.Fprintln(w, "By Status:"); err != nil {
 		return err
 	}
-	statusOrder := statusStrings(domain.ValidStatuses)
+	statusOrder := statusStrings(tk.ValidStatuses)
 	maxStatusLen := maxKeyLen(statusOrder)
 	for _, status := range statusOrder {
 		count := stats.ByStatus[status]
@@ -110,7 +77,7 @@ func outputStatsText(w io.Writer, stats Stats) error {
 	if _, err := fmt.Fprintln(w, "By Type:"); err != nil {
 		return err
 	}
-	typeOrder := typeStrings(domain.ValidTypes)
+	typeOrder := typeStrings(tk.ValidTypes)
 	maxTypeLen := maxKeyLen(typeOrder)
 	for _, typ := range typeOrder {
 		count := stats.ByType[typ]
@@ -150,17 +117,17 @@ func sortedKeys(m map[string]int) []string {
 }
 
 func maxKeyLen(keys []string) int {
-	max := 0
+	m := 0
 	for _, k := range keys {
-		if len(k) > max {
-			max = len(k)
+		if len(k) > m {
+			m = len(k)
 		}
 	}
-	return max
+	return m
 }
 
 // statusStrings converts a slice of Status to a slice of strings.
-func statusStrings(statuses []domain.Status) []string {
+func statusStrings(statuses []tk.Status) []string {
 	result := make([]string, len(statuses))
 	for i, s := range statuses {
 		result[i] = string(s)
@@ -169,7 +136,7 @@ func statusStrings(statuses []domain.Status) []string {
 }
 
 // typeStrings converts a slice of Type to a slice of strings.
-func typeStrings(types []domain.Type) []string {
+func typeStrings(types []tk.Type) []string {
 	result := make([]string, len(types))
 	for i, t := range types {
 		result[i] = string(t)
