@@ -8,15 +8,14 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/radutopala/ticket/internal/domain"
-	"github.com/radutopala/ticket/internal/storage"
+	tk "github.com/radutopala/ticket/pkg/ticket"
 )
 
 var importFlags struct {
 	skipExisting bool
 }
 
-// importTicket is a struct for JSON import that mirrors domain.Ticket
+// importTicket is a struct for JSON import that mirrors tk.Ticket
 // but uses concrete types for unmarshaling.
 type importTicket struct {
 	ID          string    `json:"ID"`
@@ -75,11 +74,12 @@ Examples:
 			return fmt.Errorf("failed to ensure tickets directory: %w", err)
 		}
 
-		var imported, skipped, generated int
+		var importedTickets []*tk.Ticket
+		var skipped, generated int
 		for _, t := range tickets {
 			// Generate ID if not provided
 			if t.ID == "" {
-				newID, err := storage.GenerateID()
+				newID, err := tk.GenerateID()
 				if err != nil {
 					return fmt.Errorf("failed to generate ID: %w", err)
 				}
@@ -96,7 +96,7 @@ Examples:
 				return fmt.Errorf("ticket %s already exists (use --skip-existing to skip)", t.ID)
 			}
 
-			// Convert to domain.Ticket
+			// Convert to tk.Ticket
 			ticket, err := convertImportTicket(t)
 			if err != nil {
 				return fmt.Errorf("failed to convert ticket %s: %w", t.ID, err)
@@ -105,10 +105,14 @@ Examples:
 			if err := store.Write(ticket); err != nil {
 				return fmt.Errorf("failed to write ticket %s: %w", t.ID, err)
 			}
-			imported++
+			importedTickets = append(importedTickets, ticket)
 		}
 
-		fmt.Printf("Imported %d ticket(s)", imported)
+		if jsonOutput {
+			return outputJSON(cmd, importedTickets)
+		}
+
+		fmt.Printf("Imported %d ticket(s)", len(importedTickets))
 		if skipped > 0 {
 			fmt.Printf(", skipped %d existing", skipped)
 		}
@@ -125,11 +129,11 @@ func readAllFromStdin() ([]byte, error) {
 	return os.ReadFile("/dev/stdin")
 }
 
-func convertImportTicket(t importTicket) (*domain.Ticket, error) {
+func convertImportTicket(t importTicket) (*tk.Ticket, error) {
 	// Parse status
-	status := domain.StatusOpen
+	status := tk.StatusOpen
 	if t.Status != "" {
-		parsed, err := domain.ParseStatus(t.Status)
+		parsed, err := tk.ParseStatus(t.Status)
 		if err != nil {
 			return nil, fmt.Errorf("invalid status: %w", err)
 		}
@@ -137,9 +141,9 @@ func convertImportTicket(t importTicket) (*domain.Ticket, error) {
 	}
 
 	// Parse type
-	ticketType := domain.TypeTask
+	ticketType := tk.TypeTask
 	if t.Type != "" {
-		parsed, err := domain.ParseType(t.Type)
+		parsed, err := tk.ParseType(t.Type)
 		if err != nil {
 			return nil, fmt.Errorf("invalid type: %w", err)
 		}
@@ -153,15 +157,15 @@ func convertImportTicket(t importTicket) (*domain.Ticket, error) {
 	}
 
 	// Convert notes
-	notes := make([]domain.Note, len(t.Notes))
+	notes := make([]tk.Note, len(t.Notes))
 	for i, n := range t.Notes {
-		notes[i] = domain.Note{
+		notes[i] = tk.Note{
 			Timestamp: n.Timestamp,
 			Content:   n.Content,
 		}
 	}
 
-	return &domain.Ticket{
+	return &tk.Ticket{
 		ID:          t.ID,
 		Status:      status,
 		Type:        ticketType,

@@ -2,9 +2,10 @@ package cmd
 
 import (
 	"fmt"
-	"slices"
 
 	"github.com/spf13/cobra"
+
+	tk "github.com/radutopala/ticket/pkg/ticket"
 )
 
 var linkCmd = &cobra.Command{
@@ -23,13 +24,8 @@ var linkCmd = &cobra.Command{
 			ids[i] = id
 		}
 
-		// Check for duplicates
-		seen := make(map[string]bool)
-		for _, id := range ids {
-			if seen[id] {
-				return fmt.Errorf("duplicate ticket ID: %s", id)
-			}
-			seen[id] = true
+		if err := tk.ValidateLinkIDs(ids); err != nil {
+			return err
 		}
 
 		// Add links to all tickets
@@ -39,19 +35,29 @@ var linkCmd = &cobra.Command{
 				return err
 			}
 
-			// Add all other IDs as links
 			for _, otherID := range ids {
 				if otherID == id {
 					continue
 				}
-				if !slices.Contains(ticket.Links, otherID) {
-					ticket.Links = append(ticket.Links, otherID)
-				}
+				tk.AddLink(ticket, otherID)
 			}
 
 			if err := store.Write(ticket); err != nil {
 				return err
 			}
+		}
+
+		if jsonOutput {
+			// Re-read all linked tickets for output
+			linked := make([]*tk.Ticket, 0, len(ids))
+			for _, id := range ids {
+				t, err := store.Read(id)
+				if err != nil {
+					return err
+				}
+				linked = append(linked, t)
+			}
+			return outputJSON(cmd, linked)
 		}
 
 		fmt.Printf("Linked: %v\n", ids)
@@ -75,23 +81,19 @@ var unlinkCmd = &cobra.Command{
 			return fmt.Errorf("failed to resolve %s: %w", args[1], err)
 		}
 
-		// Remove link from first ticket
 		ticket1, err := store.Read(id1)
 		if err != nil {
 			return err
 		}
 
-		newLinks1, found1 := removeFromSlice(ticket1.Links, id2)
-		ticket1.Links = newLinks1
+		found1 := tk.RemoveLink(ticket1, id2)
 
-		// Remove link from second ticket
 		ticket2, err := store.Read(id2)
 		if err != nil {
 			return err
 		}
 
-		newLinks2, found2 := removeFromSlice(ticket2.Links, id1)
-		ticket2.Links = newLinks2
+		found2 := tk.RemoveLink(ticket2, id1)
 
 		if !found1 && !found2 {
 			return fmt.Errorf("no link found between %s and %s", id1, id2)
@@ -102,6 +104,19 @@ var unlinkCmd = &cobra.Command{
 		}
 		if err := store.Write(ticket2); err != nil {
 			return err
+		}
+
+		if jsonOutput {
+			// Re-read both tickets for output
+			t1, err := store.Read(id1)
+			if err != nil {
+				return err
+			}
+			t2, err := store.Read(id2)
+			if err != nil {
+				return err
+			}
+			return outputJSON(cmd, []*tk.Ticket{t1, t2})
 		}
 
 		fmt.Printf("Unlinked: %s and %s\n", id1, id2)

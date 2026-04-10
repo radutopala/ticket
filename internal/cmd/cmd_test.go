@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,8 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/radutopala/ticket/internal/domain"
-	"github.com/radutopala/ticket/internal/storage"
+	tk "github.com/radutopala/ticket/pkg/ticket"
 )
 
 type CmdSuite struct {
@@ -34,10 +34,11 @@ func (s *CmdSuite) SetupTest() {
 	// Set TICKETS_DIR env var so PersistentPreRunE uses our temp dir
 	s.T().Setenv("TICKETS_DIR", tempDir)
 
-	store = storage.New(tempDir)
+	store = tk.OpenDir(tempDir)
 	require.NoError(s.T(), store.EnsureDir())
 
 	// Reset all command flags to their default values
+	jsonOutput = false
 	listFlags.Status = ""
 	listFlags.Assignee = ""
 	listFlags.Tag = ""
@@ -70,11 +71,11 @@ func (s *CmdSuite) TearDownTest() {
 	}
 }
 
-func (s *CmdSuite) createTestTicket(id string, status domain.Status, title string) *domain.Ticket {
-	ticket := &domain.Ticket{
+func (s *CmdSuite) createTestTicket(id string, status tk.Status, title string) *tk.Ticket {
+	ticket := &tk.Ticket{
 		ID:       id,
 		Status:   status,
-		Type:     domain.TypeTask,
+		Type:     tk.TypeTask,
 		Priority: 2,
 		Title:    title,
 		Created:  time.Now().UTC(),
@@ -103,7 +104,7 @@ func (s *CmdSuite) executeCommand(args ...string) (string, error) {
 
 func (s *CmdSuite) TestShowCommand() {
 	// Create a test ticket
-	ticket := s.createTestTicket("tic-show", domain.StatusOpen, "Test Ticket Title")
+	ticket := s.createTestTicket("tic-show", tk.StatusOpen, "Test Ticket Title")
 	ticket.Description = "Test description"
 	require.NoError(s.T(), store.Write(ticket))
 
@@ -121,7 +122,7 @@ func (s *CmdSuite) TestShowCommandNotFound() {
 }
 
 func (s *CmdSuite) TestCloseCommand() {
-	s.createTestTicket("tic-close", domain.StatusOpen, "Ticket to close")
+	s.createTestTicket("tic-close", tk.StatusOpen, "Ticket to close")
 
 	output, err := s.executeCommand("close", "tic-close")
 
@@ -131,7 +132,7 @@ func (s *CmdSuite) TestCloseCommand() {
 	// Verify the ticket status was updated
 	ticket, err := store.Read("tic-close")
 	require.NoError(s.T(), err)
-	require.Equal(s.T(), domain.StatusClosed, ticket.Status)
+	require.Equal(s.T(), tk.StatusClosed, ticket.Status)
 }
 
 func (s *CmdSuite) TestCloseCommandNotFound() {
@@ -141,7 +142,7 @@ func (s *CmdSuite) TestCloseCommandNotFound() {
 }
 
 func (s *CmdSuite) TestStartCommand() {
-	s.createTestTicket("tic-start", domain.StatusOpen, "Ticket to start")
+	s.createTestTicket("tic-start", tk.StatusOpen, "Ticket to start")
 
 	output, err := s.executeCommand("start", "tic-start")
 
@@ -151,7 +152,7 @@ func (s *CmdSuite) TestStartCommand() {
 	// Verify the ticket status was updated
 	ticket, err := store.Read("tic-start")
 	require.NoError(s.T(), err)
-	require.Equal(s.T(), domain.StatusInProgress, ticket.Status)
+	require.Equal(s.T(), tk.StatusInProgress, ticket.Status)
 }
 
 func (s *CmdSuite) TestStartCommandNotFound() {
@@ -162,9 +163,9 @@ func (s *CmdSuite) TestStartCommandNotFound() {
 
 func (s *CmdSuite) TestListCommand() {
 	// Create multiple tickets
-	s.createTestTicket("tic-list1", domain.StatusOpen, "First ticket")
-	s.createTestTicket("tic-list2", domain.StatusInProgress, "Second ticket")
-	s.createTestTicket("tic-list3", domain.StatusClosed, "Third ticket")
+	s.createTestTicket("tic-list1", tk.StatusOpen, "First ticket")
+	s.createTestTicket("tic-list2", tk.StatusInProgress, "Second ticket")
+	s.createTestTicket("tic-list3", tk.StatusClosed, "Third ticket")
 
 	output, err := s.executeCommand("list")
 
@@ -175,8 +176,8 @@ func (s *CmdSuite) TestListCommand() {
 }
 
 func (s *CmdSuite) TestListCommandWithStatusFilter() {
-	s.createTestTicket("tic-f1", domain.StatusOpen, "Open ticket")
-	s.createTestTicket("tic-f2", domain.StatusClosed, "Closed ticket")
+	s.createTestTicket("tic-f1", tk.StatusOpen, "Open ticket")
+	s.createTestTicket("tic-f2", tk.StatusClosed, "Closed ticket")
 
 	output, err := s.executeCommand("list", "--status", "open")
 
@@ -187,9 +188,9 @@ func (s *CmdSuite) TestListCommandWithStatusFilter() {
 
 func (s *CmdSuite) TestReadyCommand() {
 	// Create tickets with and without deps
-	s.createTestTicket("tic-ready1", domain.StatusOpen, "Ready ticket")
-	t2 := s.createTestTicket("tic-ready2", domain.StatusOpen, "Blocked ticket")
-	s.createTestTicket("tic-ready3", domain.StatusOpen, "Blocker ticket")
+	s.createTestTicket("tic-ready1", tk.StatusOpen, "Ready ticket")
+	t2 := s.createTestTicket("tic-ready2", tk.StatusOpen, "Blocked ticket")
+	s.createTestTicket("tic-ready3", tk.StatusOpen, "Blocker ticket")
 
 	// Make t2 depend on tic-ready3
 	t2.Deps = []string{"tic-ready3"}
@@ -207,9 +208,9 @@ func (s *CmdSuite) TestReadyCommand() {
 
 func (s *CmdSuite) TestBlockedCommand() {
 	// Create tickets
-	s.createTestTicket("tic-blk1", domain.StatusOpen, "Non-blocked ticket")
-	t2 := s.createTestTicket("tic-blk2", domain.StatusOpen, "Blocked ticket")
-	s.createTestTicket("tic-blk3", domain.StatusOpen, "Blocker ticket")
+	s.createTestTicket("tic-blk1", tk.StatusOpen, "Non-blocked ticket")
+	t2 := s.createTestTicket("tic-blk2", tk.StatusOpen, "Blocked ticket")
+	s.createTestTicket("tic-blk3", tk.StatusOpen, "Blocker ticket")
 
 	// Make t2 depend on tic-blk3
 	t2.Deps = []string{"tic-blk3"}
@@ -225,8 +226,8 @@ func (s *CmdSuite) TestBlockedCommand() {
 }
 
 func (s *CmdSuite) TestClosedCommand() {
-	s.createTestTicket("tic-cls1", domain.StatusOpen, "Open ticket")
-	s.createTestTicket("tic-cls2", domain.StatusClosed, "Closed ticket")
+	s.createTestTicket("tic-cls1", tk.StatusOpen, "Open ticket")
+	s.createTestTicket("tic-cls2", tk.StatusClosed, "Closed ticket")
 
 	output, err := s.executeCommand("closed")
 
@@ -237,13 +238,13 @@ func (s *CmdSuite) TestClosedCommand() {
 
 func (s *CmdSuite) TestShowWithParent() {
 	// Create parent ticket
-	s.createTestTicket("tic-parent", domain.StatusOpen, "Parent Ticket")
+	s.createTestTicket("tic-parent", tk.StatusOpen, "Parent Ticket")
 
 	// Create child ticket with parent
-	child := &domain.Ticket{
+	child := &tk.Ticket{
 		ID:       "tic-child",
-		Status:   domain.StatusOpen,
-		Type:     domain.TypeTask,
+		Status:   tk.StatusOpen,
+		Type:     tk.TypeTask,
 		Priority: 2,
 		Title:    "Child Ticket",
 		Parent:   "tic-parent",
@@ -259,7 +260,7 @@ func (s *CmdSuite) TestShowWithParent() {
 }
 
 func (s *CmdSuite) TestPartialIDResolution() {
-	s.createTestTicket("tic-unique123", domain.StatusOpen, "Unique ticket")
+	s.createTestTicket("tic-unique123", tk.StatusOpen, "Unique ticket")
 
 	output, err := s.executeCommand("show", "unique123")
 
@@ -268,8 +269,8 @@ func (s *CmdSuite) TestPartialIDResolution() {
 }
 
 func (s *CmdSuite) TestAmbiguousIDResolution() {
-	s.createTestTicket("tic-ambig1", domain.StatusOpen, "Ticket 1")
-	s.createTestTicket("tic-ambig2", domain.StatusOpen, "Ticket 2")
+	s.createTestTicket("tic-ambig1", tk.StatusOpen, "Ticket 1")
+	s.createTestTicket("tic-ambig2", tk.StatusOpen, "Ticket 2")
 
 	_, err := s.executeCommand("show", "ambig")
 
@@ -301,7 +302,7 @@ func (s *CmdSuite) TestEmptyList() {
 }
 
 func (s *CmdSuite) TestReopenCommand() {
-	s.createTestTicket("tic-reopen", domain.StatusClosed, "Ticket to reopen")
+	s.createTestTicket("tic-reopen", tk.StatusClosed, "Ticket to reopen")
 
 	output, err := s.executeCommand("reopen", "tic-reopen")
 
@@ -310,7 +311,7 @@ func (s *CmdSuite) TestReopenCommand() {
 
 	ticket, err := store.Read("tic-reopen")
 	require.NoError(s.T(), err)
-	require.Equal(s.T(), domain.StatusOpen, ticket.Status)
+	require.Equal(s.T(), tk.StatusOpen, ticket.Status)
 }
 
 func (s *CmdSuite) TestReopenCommandNotFound() {
@@ -320,7 +321,7 @@ func (s *CmdSuite) TestReopenCommandNotFound() {
 }
 
 func (s *CmdSuite) TestStatusCommand() {
-	s.createTestTicket("tic-status", domain.StatusOpen, "Ticket for status")
+	s.createTestTicket("tic-status", tk.StatusOpen, "Ticket for status")
 
 	output, err := s.executeCommand("status", "tic-status", "in_progress")
 
@@ -329,11 +330,11 @@ func (s *CmdSuite) TestStatusCommand() {
 
 	ticket, err := store.Read("tic-status")
 	require.NoError(s.T(), err)
-	require.Equal(s.T(), domain.StatusInProgress, ticket.Status)
+	require.Equal(s.T(), tk.StatusInProgress, ticket.Status)
 }
 
 func (s *CmdSuite) TestStatusCommandInvalidStatus() {
-	s.createTestTicket("tic-status-inv", domain.StatusOpen, "Ticket for invalid status")
+	s.createTestTicket("tic-status-inv", tk.StatusOpen, "Ticket for invalid status")
 
 	_, err := s.executeCommand("status", "tic-status-inv", "invalid")
 
@@ -348,11 +349,11 @@ func (s *CmdSuite) TestStatusCommandNotFound() {
 }
 
 func (s *CmdSuite) TestListWithAssigneeFilter() {
-	t1 := s.createTestTicket("tic-asn1", domain.StatusOpen, "Alice ticket")
+	t1 := s.createTestTicket("tic-asn1", tk.StatusOpen, "Alice ticket")
 	t1.Assignee = "alice"
 	require.NoError(s.T(), store.Write(t1))
 
-	t2 := s.createTestTicket("tic-asn2", domain.StatusOpen, "Bob ticket")
+	t2 := s.createTestTicket("tic-asn2", tk.StatusOpen, "Bob ticket")
 	t2.Assignee = "bob"
 	require.NoError(s.T(), store.Write(t2))
 
@@ -364,11 +365,11 @@ func (s *CmdSuite) TestListWithAssigneeFilter() {
 }
 
 func (s *CmdSuite) TestListWithTagFilter() {
-	t1 := s.createTestTicket("tic-tag1", domain.StatusOpen, "Backend ticket")
+	t1 := s.createTestTicket("tic-tag1", tk.StatusOpen, "Backend ticket")
 	t1.Tags = []string{"backend"}
 	require.NoError(s.T(), store.Write(t1))
 
-	t2 := s.createTestTicket("tic-tag2", domain.StatusOpen, "Frontend ticket")
+	t2 := s.createTestTicket("tic-tag2", tk.StatusOpen, "Frontend ticket")
 	t2.Tags = []string{"frontend"}
 	require.NoError(s.T(), store.Write(t2))
 
@@ -380,11 +381,11 @@ func (s *CmdSuite) TestListWithTagFilter() {
 }
 
 func (s *CmdSuite) TestReadyWithAssigneeFilter() {
-	t1 := s.createTestTicket("tic-r-asn1", domain.StatusOpen, "Alice ready")
+	t1 := s.createTestTicket("tic-r-asn1", tk.StatusOpen, "Alice ready")
 	t1.Assignee = "alice"
 	require.NoError(s.T(), store.Write(t1))
 
-	t2 := s.createTestTicket("tic-r-asn2", domain.StatusOpen, "Bob ready")
+	t2 := s.createTestTicket("tic-r-asn2", tk.StatusOpen, "Bob ready")
 	t2.Assignee = "bob"
 	require.NoError(s.T(), store.Write(t2))
 
@@ -396,11 +397,11 @@ func (s *CmdSuite) TestReadyWithAssigneeFilter() {
 }
 
 func (s *CmdSuite) TestReadyWithTagFilter() {
-	t1 := s.createTestTicket("tic-r-tag1", domain.StatusOpen, "Backend ready")
+	t1 := s.createTestTicket("tic-r-tag1", tk.StatusOpen, "Backend ready")
 	t1.Tags = []string{"backend"}
 	require.NoError(s.T(), store.Write(t1))
 
-	t2 := s.createTestTicket("tic-r-tag2", domain.StatusOpen, "Frontend ready")
+	t2 := s.createTestTicket("tic-r-tag2", tk.StatusOpen, "Frontend ready")
 	t2.Tags = []string{"frontend"}
 	require.NoError(s.T(), store.Write(t2))
 
@@ -412,14 +413,14 @@ func (s *CmdSuite) TestReadyWithTagFilter() {
 }
 
 func (s *CmdSuite) TestBlockedWithAssigneeFilter() {
-	s.createTestTicket("tic-blocker-asn", domain.StatusOpen, "Blocker")
+	s.createTestTicket("tic-blocker-asn", tk.StatusOpen, "Blocker")
 
-	t1 := s.createTestTicket("tic-b-asn1", domain.StatusOpen, "Alice blocked")
+	t1 := s.createTestTicket("tic-b-asn1", tk.StatusOpen, "Alice blocked")
 	t1.Assignee = "alice"
 	t1.Deps = []string{"tic-blocker-asn"}
 	require.NoError(s.T(), store.Write(t1))
 
-	t2 := s.createTestTicket("tic-b-asn2", domain.StatusOpen, "Bob blocked")
+	t2 := s.createTestTicket("tic-b-asn2", tk.StatusOpen, "Bob blocked")
 	t2.Assignee = "bob"
 	t2.Deps = []string{"tic-blocker-asn"}
 	require.NoError(s.T(), store.Write(t2))
@@ -432,14 +433,14 @@ func (s *CmdSuite) TestBlockedWithAssigneeFilter() {
 }
 
 func (s *CmdSuite) TestBlockedWithTagFilter() {
-	s.createTestTicket("tic-blocker-tag", domain.StatusOpen, "Blocker")
+	s.createTestTicket("tic-blocker-tag", tk.StatusOpen, "Blocker")
 
-	t1 := s.createTestTicket("tic-b-tag1", domain.StatusOpen, "Backend blocked")
+	t1 := s.createTestTicket("tic-b-tag1", tk.StatusOpen, "Backend blocked")
 	t1.Tags = []string{"backend"}
 	t1.Deps = []string{"tic-blocker-tag"}
 	require.NoError(s.T(), store.Write(t1))
 
-	t2 := s.createTestTicket("tic-b-tag2", domain.StatusOpen, "Frontend blocked")
+	t2 := s.createTestTicket("tic-b-tag2", tk.StatusOpen, "Frontend blocked")
 	t2.Tags = []string{"frontend"}
 	t2.Deps = []string{"tic-blocker-tag"}
 	require.NoError(s.T(), store.Write(t2))
@@ -452,11 +453,11 @@ func (s *CmdSuite) TestBlockedWithTagFilter() {
 }
 
 func (s *CmdSuite) TestClosedWithAssigneeFilter() {
-	t1 := s.createTestTicket("tic-c-asn1", domain.StatusClosed, "Alice closed")
+	t1 := s.createTestTicket("tic-c-asn1", tk.StatusClosed, "Alice closed")
 	t1.Assignee = "alice"
 	require.NoError(s.T(), store.Write(t1))
 
-	t2 := s.createTestTicket("tic-c-asn2", domain.StatusClosed, "Bob closed")
+	t2 := s.createTestTicket("tic-c-asn2", tk.StatusClosed, "Bob closed")
 	t2.Assignee = "bob"
 	require.NoError(s.T(), store.Write(t2))
 
@@ -468,11 +469,11 @@ func (s *CmdSuite) TestClosedWithAssigneeFilter() {
 }
 
 func (s *CmdSuite) TestClosedWithTagFilter() {
-	t1 := s.createTestTicket("tic-c-tag1", domain.StatusClosed, "Backend closed")
+	t1 := s.createTestTicket("tic-c-tag1", tk.StatusClosed, "Backend closed")
 	t1.Tags = []string{"backend"}
 	require.NoError(s.T(), store.Write(t1))
 
-	t2 := s.createTestTicket("tic-c-tag2", domain.StatusClosed, "Frontend closed")
+	t2 := s.createTestTicket("tic-c-tag2", tk.StatusClosed, "Frontend closed")
 	t2.Tags = []string{"frontend"}
 	require.NoError(s.T(), store.Write(t2))
 
@@ -485,11 +486,11 @@ func (s *CmdSuite) TestClosedWithTagFilter() {
 
 func (s *CmdSuite) TestClosedWithLimit() {
 	// Create 3 closed tickets
-	s.createTestTicket("tic-c-lim1", domain.StatusClosed, "Closed 1")
+	s.createTestTicket("tic-c-lim1", tk.StatusClosed, "Closed 1")
 	time.Sleep(10 * time.Millisecond)
-	s.createTestTicket("tic-c-lim2", domain.StatusClosed, "Closed 2")
+	s.createTestTicket("tic-c-lim2", tk.StatusClosed, "Closed 2")
 	time.Sleep(10 * time.Millisecond)
-	s.createTestTicket("tic-c-lim3", domain.StatusClosed, "Closed 3")
+	s.createTestTicket("tic-c-lim3", tk.StatusClosed, "Closed 3")
 
 	output, err := s.executeCommand("closed", "--limit", "2")
 
@@ -499,8 +500,8 @@ func (s *CmdSuite) TestClosedWithLimit() {
 }
 
 func (s *CmdSuite) TestReadyExcludesClosedTickets() {
-	s.createTestTicket("tic-ready-excl1", domain.StatusOpen, "Open ticket")
-	s.createTestTicket("tic-ready-excl2", domain.StatusClosed, "Closed ticket")
+	s.createTestTicket("tic-ready-excl1", tk.StatusOpen, "Open ticket")
+	s.createTestTicket("tic-ready-excl2", tk.StatusClosed, "Closed ticket")
 
 	output, err := s.executeCommand("ready")
 
@@ -511,13 +512,13 @@ func (s *CmdSuite) TestReadyExcludesClosedTickets() {
 
 func (s *CmdSuite) TestShowWithLinks() {
 	// Create two related tickets
-	s.createTestTicket("tic-link1", domain.StatusOpen, "Linked Ticket 1")
+	s.createTestTicket("tic-link1", tk.StatusOpen, "Linked Ticket 1")
 
 	// Create ticket with links
-	linked := &domain.Ticket{
+	linked := &tk.Ticket{
 		ID:       "tic-link2",
-		Status:   domain.StatusOpen,
-		Type:     domain.TypeTask,
+		Status:   tk.StatusOpen,
+		Type:     tk.TypeTask,
 		Priority: 2,
 		Title:    "Linked Ticket 2",
 		Links:    []string{"tic-link1"},
@@ -573,7 +574,7 @@ func (s *CmdSuite) TestCreateCommandWithFlags() {
 	ticket, err := store.Read(id)
 	require.NoError(s.T(), err)
 	require.Equal(s.T(), "Feature Ticket", ticket.Title)
-	require.Equal(s.T(), domain.TypeFeature, ticket.Type)
+	require.Equal(s.T(), tk.TypeFeature, ticket.Type)
 	require.Equal(s.T(), 1, ticket.Priority)
 	require.Equal(s.T(), "A new feature", ticket.Description)
 	require.Equal(s.T(), "developer", ticket.Assignee)
@@ -587,8 +588,8 @@ func (s *CmdSuite) TestCreateCommandWithInvalidType() {
 }
 
 func (s *CmdSuite) TestDepAddCommand() {
-	s.createTestTicket("tic-dep-a", domain.StatusOpen, "Ticket A")
-	s.createTestTicket("tic-dep-b", domain.StatusOpen, "Ticket B (depends on A)")
+	s.createTestTicket("tic-dep-a", tk.StatusOpen, "Ticket A")
+	s.createTestTicket("tic-dep-b", tk.StatusOpen, "Ticket B (depends on A)")
 
 	output, err := s.executeCommand("dep", "add", "tic-dep-b", "tic-dep-a")
 
@@ -602,7 +603,7 @@ func (s *CmdSuite) TestDepAddCommand() {
 }
 
 func (s *CmdSuite) TestDepAddCommandNotFound() {
-	s.createTestTicket("tic-dep-exists", domain.StatusOpen, "Existing ticket")
+	s.createTestTicket("tic-dep-exists", tk.StatusOpen, "Existing ticket")
 
 	_, err := s.executeCommand("dep", "add", "tic-dep-exists", "nonexistent")
 
@@ -610,8 +611,8 @@ func (s *CmdSuite) TestDepAddCommandNotFound() {
 }
 
 func (s *CmdSuite) TestDepRemoveCommand() {
-	s.createTestTicket("tic-dep-rm-a", domain.StatusOpen, "Ticket A")
-	t := s.createTestTicket("tic-dep-rm-b", domain.StatusOpen, "Ticket B")
+	s.createTestTicket("tic-dep-rm-a", tk.StatusOpen, "Ticket A")
+	t := s.createTestTicket("tic-dep-rm-b", tk.StatusOpen, "Ticket B")
 	t.Deps = []string{"tic-dep-rm-a"}
 	require.NoError(s.T(), store.Write(t))
 
@@ -627,8 +628,8 @@ func (s *CmdSuite) TestDepRemoveCommand() {
 }
 
 func (s *CmdSuite) TestDepTreeCommand() {
-	s.createTestTicket("tic-tree-root", domain.StatusOpen, "Root ticket")
-	t := s.createTestTicket("tic-tree-child", domain.StatusOpen, "Child ticket")
+	s.createTestTicket("tic-tree-root", tk.StatusOpen, "Root ticket")
+	t := s.createTestTicket("tic-tree-child", tk.StatusOpen, "Child ticket")
 	t.Deps = []string{"tic-tree-root"}
 	require.NoError(s.T(), store.Write(t))
 
@@ -640,8 +641,8 @@ func (s *CmdSuite) TestDepTreeCommand() {
 
 func (s *CmdSuite) TestDepCheckCommand() {
 	// Create tickets without cycles
-	s.createTestTicket("tic-nocycle1", domain.StatusOpen, "No cycle 1")
-	t := s.createTestTicket("tic-nocycle2", domain.StatusOpen, "No cycle 2")
+	s.createTestTicket("tic-nocycle1", tk.StatusOpen, "No cycle 1")
+	t := s.createTestTicket("tic-nocycle2", tk.StatusOpen, "No cycle 2")
 	t.Deps = []string{"tic-nocycle1"}
 	require.NoError(s.T(), store.Write(t))
 
@@ -652,8 +653,8 @@ func (s *CmdSuite) TestDepCheckCommand() {
 }
 
 func (s *CmdSuite) TestLinkCommand() {
-	s.createTestTicket("tic-lnk-a", domain.StatusOpen, "Ticket A")
-	s.createTestTicket("tic-lnk-b", domain.StatusOpen, "Ticket B")
+	s.createTestTicket("tic-lnk-a", tk.StatusOpen, "Ticket A")
+	s.createTestTicket("tic-lnk-b", tk.StatusOpen, "Ticket B")
 
 	output, err := s.executeCommand("link", "tic-lnk-a", "tic-lnk-b")
 
@@ -667,11 +668,11 @@ func (s *CmdSuite) TestLinkCommand() {
 }
 
 func (s *CmdSuite) TestUnlinkCommand() {
-	t1 := s.createTestTicket("tic-ulnk-a", domain.StatusOpen, "Ticket A")
+	t1 := s.createTestTicket("tic-ulnk-a", tk.StatusOpen, "Ticket A")
 	t1.Links = []string{"tic-ulnk-b"}
 	require.NoError(s.T(), store.Write(t1))
 
-	t2 := s.createTestTicket("tic-ulnk-b", domain.StatusOpen, "Ticket B")
+	t2 := s.createTestTicket("tic-ulnk-b", tk.StatusOpen, "Ticket B")
 	t2.Links = []string{"tic-ulnk-a"}
 	require.NoError(s.T(), store.Write(t2))
 
@@ -682,8 +683,8 @@ func (s *CmdSuite) TestUnlinkCommand() {
 }
 
 func (s *CmdSuite) TestQueryCommand() {
-	s.createTestTicket("tic-query1", domain.StatusOpen, "Query ticket 1")
-	s.createTestTicket("tic-query2", domain.StatusClosed, "Query ticket 2")
+	s.createTestTicket("tic-query1", tk.StatusOpen, "Query ticket 1")
+	s.createTestTicket("tic-query2", tk.StatusClosed, "Query ticket 2")
 
 	output, err := s.executeCommand("query")
 
@@ -807,7 +808,7 @@ func (s *CmdSuite) TestCreateWithNonExistentParent() {
 
 func (s *CmdSuite) TestCreateWithValidParent() {
 	// Create a parent ticket first
-	s.createTestTicket("tic-parent-create", domain.StatusOpen, "Parent Ticket")
+	s.createTestTicket("tic-parent-create", tk.StatusOpen, "Parent Ticket")
 
 	// Create a child ticket with valid parent
 	output, err := s.executeCommand("create", "Child Ticket", "--parent", "tic-parent-create")
@@ -821,7 +822,7 @@ func (s *CmdSuite) TestCreateWithValidParent() {
 
 func (s *CmdSuite) TestCreateWithValidParentPartialID() {
 	// Create a parent ticket first
-	s.createTestTicket("tic-parent-partial", domain.StatusOpen, "Parent Ticket")
+	s.createTestTicket("tic-parent-partial", tk.StatusOpen, "Parent Ticket")
 
 	// Create a child ticket using partial parent ID
 	output, err := s.executeCommand("create", "Child Ticket", "--parent", "parent-partial")
@@ -855,8 +856,8 @@ func (s *CmdSuite) TestCreateWithTags() {
 
 func (s *CmdSuite) TestDepTreeFullFlag() {
 	// Create a chain of dependencies
-	s.createTestTicket("tic-tree-full-a", domain.StatusOpen, "Tree A")
-	t := s.createTestTicket("tic-tree-full-b", domain.StatusOpen, "Tree B")
+	s.createTestTicket("tic-tree-full-a", tk.StatusOpen, "Tree A")
+	t := s.createTestTicket("tic-tree-full-b", tk.StatusOpen, "Tree B")
 	t.Deps = []string{"tic-tree-full-a"}
 	require.NoError(s.T(), store.Write(t))
 
@@ -867,8 +868,8 @@ func (s *CmdSuite) TestDepTreeFullFlag() {
 }
 
 func (s *CmdSuite) TestDepTreeForSpecificTicket() {
-	s.createTestTicket("tic-tree-spec-a", domain.StatusOpen, "Spec A")
-	t := s.createTestTicket("tic-tree-spec-b", domain.StatusOpen, "Spec B")
+	s.createTestTicket("tic-tree-spec-a", tk.StatusOpen, "Spec A")
+	t := s.createTestTicket("tic-tree-spec-b", tk.StatusOpen, "Spec B")
 	t.Deps = []string{"tic-tree-spec-a"}
 	require.NoError(s.T(), store.Write(t))
 
@@ -880,8 +881,8 @@ func (s *CmdSuite) TestDepTreeForSpecificTicket() {
 }
 
 func (s *CmdSuite) TestUndepCommand() {
-	s.createTestTicket("tic-undep-a", domain.StatusOpen, "Undep A")
-	t := s.createTestTicket("tic-undep-b", domain.StatusOpen, "Undep B")
+	s.createTestTicket("tic-undep-a", tk.StatusOpen, "Undep A")
+	t := s.createTestTicket("tic-undep-b", tk.StatusOpen, "Undep B")
 	t.Deps = []string{"tic-undep-a"}
 	require.NoError(s.T(), store.Write(t))
 
@@ -897,7 +898,7 @@ func (s *CmdSuite) TestUndepCommand() {
 }
 
 func (s *CmdSuite) TestAddNoteCommand() {
-	s.createTestTicket("tic-note1", domain.StatusOpen, "Note Test Ticket")
+	s.createTestTicket("tic-note1", tk.StatusOpen, "Note Test Ticket")
 
 	output, err := s.executeCommand("add-note", "tic-note1", "This is a test note")
 
@@ -918,7 +919,7 @@ func (s *CmdSuite) TestAddNoteCommandNotFound() {
 }
 
 func (s *CmdSuite) TestAddNoteCommandMultipleNotes() {
-	s.createTestTicket("tic-note2", domain.StatusOpen, "Multiple Notes Ticket")
+	s.createTestTicket("tic-note2", tk.StatusOpen, "Multiple Notes Ticket")
 
 	_, err := s.executeCommand("add-note", "tic-note2", "First note")
 	require.NoError(s.T(), err)
@@ -933,32 +934,10 @@ func (s *CmdSuite) TestAddNoteCommandMultipleNotes() {
 	require.Contains(s.T(), ticket.Notes[1].Content, "Second note")
 }
 
-func (s *CmdSuite) TestQueryWithJqFilter() {
-	s.createTestTicket("tic-jq1", domain.StatusOpen, "JQ Test 1")
-	s.createTestTicket("tic-jq2", domain.StatusClosed, "JQ Test 2")
-
-	output, err := s.executeCommand("query", ".[] | select(.Status == \"open\") | .ID")
-
-	require.NoError(s.T(), err)
-	require.Contains(s.T(), output, "tic-jq1")
-	require.NotContains(s.T(), output, "tic-jq2")
-}
-
-func (s *CmdSuite) TestQueryWithLengthFilter() {
-	s.createTestTicket("tic-jqlen1", domain.StatusOpen, "Length Test 1")
-	s.createTestTicket("tic-jqlen2", domain.StatusOpen, "Length Test 2")
-
-	output, err := s.executeCommand("query", "length")
-
-	require.NoError(s.T(), err)
-	// Output should contain the count (at least 2)
-	require.NotEmpty(s.T(), strings.TrimSpace(output))
-}
-
 func (s *CmdSuite) TestDepCheckWithCycle() {
 	// Create tickets with a cycle
-	t1 := s.createTestTicket("tic-cycle1", domain.StatusOpen, "Cycle 1")
-	t2 := s.createTestTicket("tic-cycle2", domain.StatusOpen, "Cycle 2")
+	t1 := s.createTestTicket("tic-cycle1", tk.StatusOpen, "Cycle 1")
+	t2 := s.createTestTicket("tic-cycle2", tk.StatusOpen, "Cycle 2")
 
 	t1.Deps = []string{"tic-cycle2"}
 	require.NoError(s.T(), store.Write(t1))
@@ -972,9 +951,9 @@ func (s *CmdSuite) TestDepCheckWithCycle() {
 }
 
 func (s *CmdSuite) TestLinkMultipleTickets() {
-	s.createTestTicket("tic-mlink1", domain.StatusOpen, "Multi Link 1")
-	s.createTestTicket("tic-mlink2", domain.StatusOpen, "Multi Link 2")
-	s.createTestTicket("tic-mlink3", domain.StatusOpen, "Multi Link 3")
+	s.createTestTicket("tic-mlink1", tk.StatusOpen, "Multi Link 1")
+	s.createTestTicket("tic-mlink2", tk.StatusOpen, "Multi Link 2")
+	s.createTestTicket("tic-mlink3", tk.StatusOpen, "Multi Link 3")
 
 	output, err := s.executeCommand("link", "tic-mlink1", "tic-mlink2", "tic-mlink3")
 
@@ -994,8 +973,8 @@ func (s *CmdSuite) TestLinkMultipleTickets() {
 }
 
 func (s *CmdSuite) TestExportCommandJSON() {
-	s.createTestTicket("tic-exp1", domain.StatusOpen, "Export Test 1")
-	s.createTestTicket("tic-exp2", domain.StatusClosed, "Export Test 2")
+	s.createTestTicket("tic-exp1", tk.StatusOpen, "Export Test 1")
+	s.createTestTicket("tic-exp2", tk.StatusClosed, "Export Test 2")
 
 	output, err := s.executeCommand("export")
 
@@ -1010,7 +989,7 @@ func (s *CmdSuite) TestExportCommandJSON() {
 }
 
 func (s *CmdSuite) TestExportCommandCSV() {
-	t1 := s.createTestTicket("tic-expcsv1", domain.StatusOpen, "CSV Export 1")
+	t1 := s.createTestTicket("tic-expcsv1", tk.StatusOpen, "CSV Export 1")
 	t1.Tags = []string{"tag1", "tag2"}
 	require.NoError(s.T(), store.Write(t1))
 
@@ -1027,7 +1006,7 @@ func (s *CmdSuite) TestExportCommandCSV() {
 }
 
 func (s *CmdSuite) TestExportCommandToFile() {
-	s.createTestTicket("tic-expfile", domain.StatusOpen, "File Export Test")
+	s.createTestTicket("tic-expfile", tk.StatusOpen, "File Export Test")
 
 	outputFile := filepath.Join(s.tempDir, "export.json")
 	_, err := s.executeCommand("export", "--output="+outputFile)
@@ -1081,19 +1060,19 @@ func (s *CmdSuite) TestImportCommandJSON() {
 	t1, err := store.Read("tic-imp1")
 	require.NoError(s.T(), err)
 	require.Equal(s.T(), "Imported Ticket 1", t1.Title)
-	require.Equal(s.T(), domain.StatusOpen, t1.Status)
+	require.Equal(s.T(), tk.StatusOpen, t1.Status)
 	require.Equal(s.T(), 1, t1.Priority)
 
 	t2, err := store.Read("tic-imp2")
 	require.NoError(s.T(), err)
 	require.Equal(s.T(), "Imported Ticket 2", t2.Title)
-	require.Equal(s.T(), domain.StatusClosed, t2.Status)
-	require.Equal(s.T(), domain.TypeBug, t2.Type)
+	require.Equal(s.T(), tk.StatusClosed, t2.Status)
+	require.Equal(s.T(), tk.TypeBug, t2.Type)
 }
 
 func (s *CmdSuite) TestImportCommandSkipExisting() {
 	// Create an existing ticket
-	s.createTestTicket("tic-impskip", domain.StatusOpen, "Existing Ticket")
+	s.createTestTicket("tic-impskip", tk.StatusOpen, "Existing Ticket")
 
 	// Try to import a ticket with the same ID
 	importData := `[
@@ -1123,7 +1102,7 @@ func (s *CmdSuite) TestImportCommandSkipExisting() {
 	existing, err := store.Read("tic-impskip")
 	require.NoError(s.T(), err)
 	require.Equal(s.T(), "Existing Ticket", existing.Title)
-	require.Equal(s.T(), domain.StatusOpen, existing.Status)
+	require.Equal(s.T(), tk.StatusOpen, existing.Status)
 
 	// Verify new ticket was created
 	newTicket, err := store.Read("tic-impnew")
@@ -1133,7 +1112,7 @@ func (s *CmdSuite) TestImportCommandSkipExisting() {
 
 func (s *CmdSuite) TestImportCommandConflictError() {
 	// Create an existing ticket
-	s.createTestTicket("tic-impconflict", domain.StatusOpen, "Existing Ticket")
+	s.createTestTicket("tic-impconflict", tk.StatusOpen, "Existing Ticket")
 
 	// Try to import a ticket with the same ID without --skip-existing
 	importData := `[{"ID": "tic-impconflict", "Title": "Conflict"}]`
@@ -1183,15 +1162,15 @@ func (s *CmdSuite) TestImportCommandFileNotFound() {
 
 func (s *CmdSuite) TestExportImportRoundTrip() {
 	// Create tickets with various fields
-	t1 := s.createTestTicket("tic-rt1", domain.StatusOpen, "Round Trip 1")
+	t1 := s.createTestTicket("tic-rt1", tk.StatusOpen, "Round Trip 1")
 	t1.Description = "Test description"
 	t1.Tags = []string{"backend", "api"}
 	t1.Priority = 1
 	t1.Assignee = "developer"
 	require.NoError(s.T(), store.Write(t1))
 
-	t2 := s.createTestTicket("tic-rt2", domain.StatusInProgress, "Round Trip 2")
-	t2.Type = domain.TypeBug
+	t2 := s.createTestTicket("tic-rt2", tk.StatusInProgress, "Round Trip 2")
+	t2.Type = tk.TypeBug
 	t2.Deps = []string{"tic-rt1"}
 	require.NoError(s.T(), store.Write(t2))
 
@@ -1225,21 +1204,21 @@ func (s *CmdSuite) TestExportImportRoundTrip() {
 	restored2, err := store.Read("tic-rt2")
 	require.NoError(s.T(), err)
 	require.Equal(s.T(), "Round Trip 2", restored2.Title)
-	require.Equal(s.T(), domain.TypeBug, restored2.Type)
-	require.Equal(s.T(), domain.StatusInProgress, restored2.Status)
+	require.Equal(s.T(), tk.TypeBug, restored2.Type)
+	require.Equal(s.T(), tk.StatusInProgress, restored2.Status)
 	require.Equal(s.T(), []string{"tic-rt1"}, restored2.Deps)
 }
 
 func (s *CmdSuite) TestBulkCloseByTag() {
-	t1 := s.createTestTicket("tic-bulk1", domain.StatusOpen, "Bulk Test 1")
+	t1 := s.createTestTicket("tic-bulk1", tk.StatusOpen, "Bulk Test 1")
 	t1.Tags = []string{"sprint-1"}
 	require.NoError(s.T(), store.Write(t1))
 
-	t2 := s.createTestTicket("tic-bulk2", domain.StatusOpen, "Bulk Test 2")
+	t2 := s.createTestTicket("tic-bulk2", tk.StatusOpen, "Bulk Test 2")
 	t2.Tags = []string{"sprint-1"}
 	require.NoError(s.T(), store.Write(t2))
 
-	t3 := s.createTestTicket("tic-bulk3", domain.StatusOpen, "Bulk Test 3")
+	t3 := s.createTestTicket("tic-bulk3", tk.StatusOpen, "Bulk Test 3")
 	t3.Tags = []string{"sprint-2"}
 	require.NoError(s.T(), store.Write(t3))
 
@@ -1250,26 +1229,26 @@ func (s *CmdSuite) TestBulkCloseByTag() {
 
 	// Verify tickets were closed
 	ticket1, _ := store.Read("tic-bulk1")
-	require.Equal(s.T(), domain.StatusClosed, ticket1.Status)
+	require.Equal(s.T(), tk.StatusClosed, ticket1.Status)
 
 	ticket2, _ := store.Read("tic-bulk2")
-	require.Equal(s.T(), domain.StatusClosed, ticket2.Status)
+	require.Equal(s.T(), tk.StatusClosed, ticket2.Status)
 
 	// Third ticket should still be open
 	ticket3, _ := store.Read("tic-bulk3")
-	require.Equal(s.T(), domain.StatusOpen, ticket3.Status)
+	require.Equal(s.T(), tk.StatusOpen, ticket3.Status)
 }
 
 func (s *CmdSuite) TestBulkStartByAssignee() {
-	t1 := s.createTestTicket("tic-bulkstart1", domain.StatusOpen, "Start Test 1")
+	t1 := s.createTestTicket("tic-bulkstart1", tk.StatusOpen, "Start Test 1")
 	t1.Assignee = "alice"
 	require.NoError(s.T(), store.Write(t1))
 
-	t2 := s.createTestTicket("tic-bulkstart2", domain.StatusOpen, "Start Test 2")
+	t2 := s.createTestTicket("tic-bulkstart2", tk.StatusOpen, "Start Test 2")
 	t2.Assignee = "alice"
 	require.NoError(s.T(), store.Write(t2))
 
-	t3 := s.createTestTicket("tic-bulkstart3", domain.StatusOpen, "Start Test 3")
+	t3 := s.createTestTicket("tic-bulkstart3", tk.StatusOpen, "Start Test 3")
 	t3.Assignee = "bob"
 	require.NoError(s.T(), store.Write(t3))
 
@@ -1280,20 +1259,20 @@ func (s *CmdSuite) TestBulkStartByAssignee() {
 
 	// Verify tickets were started
 	ticket1, _ := store.Read("tic-bulkstart1")
-	require.Equal(s.T(), domain.StatusInProgress, ticket1.Status)
+	require.Equal(s.T(), tk.StatusInProgress, ticket1.Status)
 
 	ticket2, _ := store.Read("tic-bulkstart2")
-	require.Equal(s.T(), domain.StatusInProgress, ticket2.Status)
+	require.Equal(s.T(), tk.StatusInProgress, ticket2.Status)
 
 	// Third ticket should still be open
 	ticket3, _ := store.Read("tic-bulkstart3")
-	require.Equal(s.T(), domain.StatusOpen, ticket3.Status)
+	require.Equal(s.T(), tk.StatusOpen, ticket3.Status)
 }
 
 func (s *CmdSuite) TestBulkReopenByStatus() {
-	s.createTestTicket("tic-bulkreopen1", domain.StatusClosed, "Reopen Test 1")
-	s.createTestTicket("tic-bulkreopen2", domain.StatusClosed, "Reopen Test 2")
-	s.createTestTicket("tic-bulkreopen3", domain.StatusOpen, "Reopen Test 3")
+	s.createTestTicket("tic-bulkreopen1", tk.StatusClosed, "Reopen Test 1")
+	s.createTestTicket("tic-bulkreopen2", tk.StatusClosed, "Reopen Test 2")
+	s.createTestTicket("tic-bulkreopen3", tk.StatusOpen, "Reopen Test 3")
 
 	output, err := s.executeCommand("bulk", "reopen", "--status=closed")
 
@@ -1302,18 +1281,18 @@ func (s *CmdSuite) TestBulkReopenByStatus() {
 
 	// Verify tickets were reopened
 	ticket1, _ := store.Read("tic-bulkreopen1")
-	require.Equal(s.T(), domain.StatusOpen, ticket1.Status)
+	require.Equal(s.T(), tk.StatusOpen, ticket1.Status)
 
 	ticket2, _ := store.Read("tic-bulkreopen2")
-	require.Equal(s.T(), domain.StatusOpen, ticket2.Status)
+	require.Equal(s.T(), tk.StatusOpen, ticket2.Status)
 }
 
 func (s *CmdSuite) TestBulkDryRun() {
-	t1 := s.createTestTicket("tic-bulkdry1", domain.StatusOpen, "Dry Run Test 1")
+	t1 := s.createTestTicket("tic-bulkdry1", tk.StatusOpen, "Dry Run Test 1")
 	t1.Tags = []string{"test"}
 	require.NoError(s.T(), store.Write(t1))
 
-	t2 := s.createTestTicket("tic-bulkdry2", domain.StatusOpen, "Dry Run Test 2")
+	t2 := s.createTestTicket("tic-bulkdry2", tk.StatusOpen, "Dry Run Test 2")
 	t2.Tags = []string{"test"}
 	require.NoError(s.T(), store.Write(t2))
 
@@ -1326,14 +1305,14 @@ func (s *CmdSuite) TestBulkDryRun() {
 
 	// Verify tickets were NOT closed
 	ticket1, _ := store.Read("tic-bulkdry1")
-	require.Equal(s.T(), domain.StatusOpen, ticket1.Status)
+	require.Equal(s.T(), tk.StatusOpen, ticket1.Status)
 
 	ticket2, _ := store.Read("tic-bulkdry2")
-	require.Equal(s.T(), domain.StatusOpen, ticket2.Status)
+	require.Equal(s.T(), tk.StatusOpen, ticket2.Status)
 }
 
 func (s *CmdSuite) TestBulkNoMatches() {
-	s.createTestTicket("tic-bulknomatch", domain.StatusOpen, "No Match Test")
+	s.createTestTicket("tic-bulknomatch", tk.StatusOpen, "No Match Test")
 
 	output, err := s.executeCommand("bulk", "close", "--tag=nonexistent")
 
@@ -1342,8 +1321,8 @@ func (s *CmdSuite) TestBulkNoMatches() {
 }
 
 func (s *CmdSuite) TestBulkAlreadyInTargetStatus() {
-	s.createTestTicket("tic-bulkalready1", domain.StatusClosed, "Already Closed 1")
-	s.createTestTicket("tic-bulkalready2", domain.StatusClosed, "Already Closed 2")
+	s.createTestTicket("tic-bulkalready1", tk.StatusClosed, "Already Closed 1")
+	s.createTestTicket("tic-bulkalready2", tk.StatusClosed, "Already Closed 2")
 
 	output, err := s.executeCommand("bulk", "close", "--status=closed")
 
@@ -1352,17 +1331,17 @@ func (s *CmdSuite) TestBulkAlreadyInTargetStatus() {
 }
 
 func (s *CmdSuite) TestBulkMultipleFilters() {
-	t1 := s.createTestTicket("tic-bulkmulti1", domain.StatusOpen, "Multi Filter 1")
+	t1 := s.createTestTicket("tic-bulkmulti1", tk.StatusOpen, "Multi Filter 1")
 	t1.Tags = []string{"urgent"}
 	t1.Assignee = "alice"
 	require.NoError(s.T(), store.Write(t1))
 
-	t2 := s.createTestTicket("tic-bulkmulti2", domain.StatusOpen, "Multi Filter 2")
+	t2 := s.createTestTicket("tic-bulkmulti2", tk.StatusOpen, "Multi Filter 2")
 	t2.Tags = []string{"urgent"}
 	t2.Assignee = "bob"
 	require.NoError(s.T(), store.Write(t2))
 
-	t3 := s.createTestTicket("tic-bulkmulti3", domain.StatusOpen, "Multi Filter 3")
+	t3 := s.createTestTicket("tic-bulkmulti3", tk.StatusOpen, "Multi Filter 3")
 	t3.Tags = []string{"normal"}
 	t3.Assignee = "alice"
 	require.NoError(s.T(), store.Write(t3))
@@ -1374,11 +1353,219 @@ func (s *CmdSuite) TestBulkMultipleFilters() {
 
 	// Only first ticket should be closed
 	ticket1, _ := store.Read("tic-bulkmulti1")
-	require.Equal(s.T(), domain.StatusClosed, ticket1.Status)
+	require.Equal(s.T(), tk.StatusClosed, ticket1.Status)
 
 	ticket2, _ := store.Read("tic-bulkmulti2")
-	require.Equal(s.T(), domain.StatusOpen, ticket2.Status)
+	require.Equal(s.T(), tk.StatusOpen, ticket2.Status)
 
 	ticket3, _ := store.Read("tic-bulkmulti3")
-	require.Equal(s.T(), domain.StatusOpen, ticket3.Status)
+	require.Equal(s.T(), tk.StatusOpen, ticket3.Status)
+}
+
+// --- JSON output tests ---
+
+func (s *CmdSuite) TestCreateCommandJSON() {
+	output, err := s.executeCommand("create", "--json", "JSON Create Test", "--type", "bug", "--priority", "1")
+
+	require.NoError(s.T(), err)
+	var t tk.Ticket
+	require.NoError(s.T(), json.Unmarshal([]byte(output), &t))
+	require.Equal(s.T(), "JSON Create Test", t.Title)
+	require.Equal(s.T(), tk.TypeBug, t.Type)
+	require.Equal(s.T(), 1, t.Priority)
+	require.Equal(s.T(), tk.StatusOpen, t.Status)
+}
+
+func (s *CmdSuite) TestShowCommandJSON() {
+	ticket := s.createTestTicket("tic-showjson", tk.StatusOpen, "Show JSON Test")
+	ticket.Description = "Test description"
+	require.NoError(s.T(), store.Write(ticket))
+
+	output, err := s.executeCommand("show", "--json", "tic-showjson")
+
+	require.NoError(s.T(), err)
+	var t tk.Ticket
+	require.NoError(s.T(), json.Unmarshal([]byte(output), &t))
+	require.Equal(s.T(), "tic-showjson", t.ID)
+	require.Equal(s.T(), "Show JSON Test", t.Title)
+	require.Equal(s.T(), "Test description", t.Description)
+}
+
+func (s *CmdSuite) TestStartCommandJSON() {
+	s.createTestTicket("tic-startjson", tk.StatusOpen, "Start JSON Test")
+
+	output, err := s.executeCommand("start", "--json", "tic-startjson")
+
+	require.NoError(s.T(), err)
+	var t tk.Ticket
+	require.NoError(s.T(), json.Unmarshal([]byte(output), &t))
+	require.Equal(s.T(), tk.StatusInProgress, t.Status)
+	require.Equal(s.T(), "tic-startjson", t.ID)
+}
+
+func (s *CmdSuite) TestCloseCommandJSON() {
+	s.createTestTicket("tic-closejson", tk.StatusOpen, "Close JSON Test")
+
+	output, err := s.executeCommand("close", "--json", "tic-closejson")
+
+	require.NoError(s.T(), err)
+	var t tk.Ticket
+	require.NoError(s.T(), json.Unmarshal([]byte(output), &t))
+	require.Equal(s.T(), tk.StatusClosed, t.Status)
+}
+
+func (s *CmdSuite) TestReopenCommandJSON() {
+	s.createTestTicket("tic-reopenjson", tk.StatusClosed, "Reopen JSON Test")
+
+	output, err := s.executeCommand("reopen", "--json", "tic-reopenjson")
+
+	require.NoError(s.T(), err)
+	var t tk.Ticket
+	require.NoError(s.T(), json.Unmarshal([]byte(output), &t))
+	require.Equal(s.T(), tk.StatusOpen, t.Status)
+}
+
+func (s *CmdSuite) TestStatusCommandJSON() {
+	s.createTestTicket("tic-statusjson", tk.StatusOpen, "Status JSON Test")
+
+	output, err := s.executeCommand("status", "--json", "tic-statusjson", "in_progress")
+
+	require.NoError(s.T(), err)
+	var t tk.Ticket
+	require.NoError(s.T(), json.Unmarshal([]byte(output), &t))
+	require.Equal(s.T(), tk.StatusInProgress, t.Status)
+}
+
+func (s *CmdSuite) TestListCommandJSON() {
+	s.createTestTicket("tic-listjson1", tk.StatusOpen, "List JSON A")
+	s.createTestTicket("tic-listjson2", tk.StatusInProgress, "List JSON B")
+
+	output, err := s.executeCommand("list", "--json")
+
+	require.NoError(s.T(), err)
+	var tickets []*tk.Ticket
+	require.NoError(s.T(), json.Unmarshal([]byte(output), &tickets))
+	require.Len(s.T(), tickets, 2)
+}
+
+func (s *CmdSuite) TestListCommandJSONWithFilter() {
+	s.createTestTicket("tic-listjf1", tk.StatusOpen, "Open JSON")
+	s.createTestTicket("tic-listjf2", tk.StatusClosed, "Closed JSON")
+
+	output, err := s.executeCommand("list", "--json", "--status", "open")
+
+	require.NoError(s.T(), err)
+	var tickets []*tk.Ticket
+	require.NoError(s.T(), json.Unmarshal([]byte(output), &tickets))
+	require.Len(s.T(), tickets, 1)
+	require.Equal(s.T(), "tic-listjf1", tickets[0].ID)
+}
+
+func (s *CmdSuite) TestReadyCommandJSON() {
+	s.createTestTicket("tic-readyjson1", tk.StatusOpen, "Ready JSON")
+	t2 := s.createTestTicket("tic-readyjson2", tk.StatusOpen, "Blocked JSON")
+	t2.Deps = []string{"tic-readyjson1"}
+	require.NoError(s.T(), store.Write(t2))
+
+	output, err := s.executeCommand("ready", "--json")
+
+	require.NoError(s.T(), err)
+	var tickets []*tk.Ticket
+	require.NoError(s.T(), json.Unmarshal([]byte(output), &tickets))
+	require.Len(s.T(), tickets, 1)
+	require.Equal(s.T(), "tic-readyjson1", tickets[0].ID)
+}
+
+func (s *CmdSuite) TestBlockedCommandJSON() {
+	s.createTestTicket("tic-blkjson1", tk.StatusOpen, "Blocker JSON")
+	t2 := s.createTestTicket("tic-blkjson2", tk.StatusOpen, "Blocked JSON")
+	t2.Deps = []string{"tic-blkjson1"}
+	require.NoError(s.T(), store.Write(t2))
+
+	output, err := s.executeCommand("blocked", "--json")
+
+	require.NoError(s.T(), err)
+	var tickets []*tk.Ticket
+	require.NoError(s.T(), json.Unmarshal([]byte(output), &tickets))
+	require.Len(s.T(), tickets, 1)
+	require.Equal(s.T(), "tic-blkjson2", tickets[0].ID)
+}
+
+func (s *CmdSuite) TestClosedCommandJSON() {
+	s.createTestTicket("tic-clsjson1", tk.StatusOpen, "Open JSON")
+	s.createTestTicket("tic-clsjson2", tk.StatusClosed, "Closed JSON")
+
+	output, err := s.executeCommand("closed", "--json")
+
+	require.NoError(s.T(), err)
+	var tickets []*tk.Ticket
+	require.NoError(s.T(), json.Unmarshal([]byte(output), &tickets))
+	require.Len(s.T(), tickets, 1)
+	require.Equal(s.T(), "tic-clsjson2", tickets[0].ID)
+}
+
+func (s *CmdSuite) TestDepAddCommandJSON() {
+	s.createTestTicket("tic-depjson-a", tk.StatusOpen, "Dep JSON A")
+	s.createTestTicket("tic-depjson-b", tk.StatusOpen, "Dep JSON B")
+
+	output, err := s.executeCommand("dep", "add", "--json", "tic-depjson-b", "tic-depjson-a")
+
+	require.NoError(s.T(), err)
+	var t tk.Ticket
+	require.NoError(s.T(), json.Unmarshal([]byte(output), &t))
+	require.Equal(s.T(), "tic-depjson-b", t.ID)
+	require.Equal(s.T(), []string{"tic-depjson-a"}, t.Deps)
+}
+
+func (s *CmdSuite) TestDepCheckCommandJSON() {
+	s.createTestTicket("tic-chkjson1", tk.StatusOpen, "Check JSON A")
+	s.createTestTicket("tic-chkjson2", tk.StatusOpen, "Check JSON B")
+
+	output, err := s.executeCommand("dep", "check", "--json")
+
+	require.NoError(s.T(), err)
+	var result map[string]any
+	require.NoError(s.T(), json.Unmarshal([]byte(output), &result))
+	require.Equal(s.T(), float64(0), result["count"])
+}
+
+func (s *CmdSuite) TestVersionCommandJSON() {
+	output, err := s.executeCommand("version", "--json")
+
+	require.NoError(s.T(), err)
+	var v map[string]string
+	require.NoError(s.T(), json.Unmarshal([]byte(output), &v))
+	require.NotEmpty(s.T(), v["version"])
+}
+
+func (s *CmdSuite) TestSearchCommandJSON() {
+	ticket := s.createTestTicket("tic-srchjson", tk.StatusOpen, "Searchable JSON title")
+	ticket.Description = "Has matching content"
+	require.NoError(s.T(), store.Write(ticket))
+
+	output, err := s.executeCommand("search", "--json", "Searchable")
+
+	require.NoError(s.T(), err)
+	var matches []tk.SearchMatch
+	require.NoError(s.T(), json.Unmarshal([]byte(output), &matches))
+	require.Len(s.T(), matches, 1)
+	require.Equal(s.T(), "tic-srchjson", matches[0].Ticket.ID)
+}
+
+func (s *CmdSuite) TestBulkCloseCommandJSON() {
+	t1 := s.createTestTicket("tic-bulkjson1", tk.StatusOpen, "Bulk JSON 1")
+	t1.Tags = []string{"release"}
+	require.NoError(s.T(), store.Write(t1))
+
+	t2 := s.createTestTicket("tic-bulkjson2", tk.StatusOpen, "Bulk JSON 2")
+	t2.Tags = []string{"other"}
+	require.NoError(s.T(), store.Write(t2))
+
+	output, err := s.executeCommand("bulk", "close", "--json", "--tag=release")
+
+	require.NoError(s.T(), err)
+	var updated []*tk.Ticket
+	require.NoError(s.T(), json.Unmarshal([]byte(output), &updated))
+	require.Len(s.T(), updated, 1)
+	require.Equal(s.T(), tk.StatusClosed, updated[0].Status)
 }

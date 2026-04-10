@@ -5,7 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/radutopala/ticket/internal/domain"
+	tk "github.com/radutopala/ticket/pkg/ticket"
 )
 
 var bulkFlags struct {
@@ -37,7 +37,7 @@ var bulkCloseCmd = &cobra.Command{
 	Use:   "close",
 	Short: "Close multiple tickets",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return runBulkAction(domain.StatusClosed, "closed")
+		return runBulkAction(cmd, tk.StatusClosed, "closed")
 	},
 }
 
@@ -45,7 +45,7 @@ var bulkReopenCmd = &cobra.Command{
 	Use:   "reopen",
 	Short: "Reopen multiple tickets",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return runBulkAction(domain.StatusOpen, "reopened")
+		return runBulkAction(cmd, tk.StatusOpen, "reopened")
 	},
 }
 
@@ -53,32 +53,36 @@ var bulkStartCmd = &cobra.Command{
 	Use:   "start",
 	Short: "Start multiple tickets",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return runBulkAction(domain.StatusInProgress, "started")
+		return runBulkAction(cmd, tk.StatusInProgress, "started")
 	},
 }
 
-func runBulkAction(newStatus domain.Status, actionVerb string) error {
+func runBulkAction(cmd *cobra.Command, newStatus tk.Status, actionVerb string) error {
 	tickets, err := store.List()
 	if err != nil {
 		return err
 	}
 
-	// Build filter options
-	filterOpts := FilterOptions{
+	filterOpts := tk.FilterOptions{
 		Status:   bulkFlags.status,
 		Assignee: bulkFlags.assignee,
 		Tag:      bulkFlags.tag,
 	}
 
-	// Filter tickets
-	filtered := filterTickets(tickets, filterOpts)
+	filtered := tk.Filter(tickets, filterOpts)
 
 	if len(filtered) == 0 {
+		if jsonOutput {
+			return outputJSON(cmd, []*tk.Ticket{})
+		}
 		fmt.Println("No tickets match the specified filters")
 		return nil
 	}
 
 	if bulkFlags.dryRun {
+		if jsonOutput {
+			return outputJSON(cmd, filtered)
+		}
 		fmt.Printf("Dry run: would %s %d ticket(s):\n", actionVerb, len(filtered))
 		for _, t := range filtered {
 			fmt.Printf("  %s [%s] - %s\n", t.ID, t.Status, t.Title)
@@ -86,36 +90,40 @@ func runBulkAction(newStatus domain.Status, actionVerb string) error {
 		return nil
 	}
 
-	var updated int
+	var updatedTickets []*tk.Ticket
 	for _, t := range filtered {
 		if t.Status == newStatus {
-			continue // Skip tickets already in target status
+			continue
 		}
 		t.Status = newStatus
 		if err := store.Write(t); err != nil {
 			return fmt.Errorf("failed to update %s: %w", t.ID, err)
 		}
-		updated++
-		fmt.Printf("%s %s\n", actionVerb, t.ID)
+		updatedTickets = append(updatedTickets, t)
+		if !jsonOutput {
+			fmt.Printf("%s %s\n", actionVerb, t.ID)
+		}
 	}
 
-	if updated == 0 {
+	if jsonOutput {
+		return outputJSON(cmd, updatedTickets)
+	}
+
+	if len(updatedTickets) == 0 {
 		fmt.Printf("No tickets needed updating (all already %s)\n", newStatus)
 	} else {
-		fmt.Printf("Successfully %s %d ticket(s)\n", actionVerb, updated)
+		fmt.Printf("Successfully %s %d ticket(s)\n", actionVerb, len(updatedTickets))
 	}
 
 	return nil
 }
 
 func init() {
-	// Add flags to parent bulk command (inherited by subcommands)
 	bulkCmd.PersistentFlags().StringVarP(&bulkFlags.tag, "tag", "T", "", "Filter by tag")
 	bulkCmd.PersistentFlags().StringVar(&bulkFlags.status, "status", "", "Filter by status (open|in_progress|closed)")
 	bulkCmd.PersistentFlags().StringVarP(&bulkFlags.assignee, "assignee", "a", "", "Filter by assignee")
 	bulkCmd.PersistentFlags().BoolVar(&bulkFlags.dryRun, "dry-run", false, "Preview changes without applying them")
 
-	// Add subcommands
 	bulkCmd.AddCommand(bulkCloseCmd)
 	bulkCmd.AddCommand(bulkReopenCmd)
 	bulkCmd.AddCommand(bulkStartCmd)

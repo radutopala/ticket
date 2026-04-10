@@ -9,7 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/radutopala/ticket/internal/domain"
+	tk "github.com/radutopala/ticket/pkg/ticket"
 )
 
 var addNoteCmd = &cobra.Command{
@@ -48,7 +48,7 @@ var addNoteCmd = &cobra.Command{
 		}
 
 		// Add the note
-		note := domain.Note{
+		note := tk.Note{
 			Timestamp: time.Now().UTC(),
 			Content:   noteText,
 		}
@@ -56,6 +56,10 @@ var addNoteCmd = &cobra.Command{
 
 		if err := store.Write(ticket); err != nil {
 			return err
+		}
+
+		if jsonOutput {
+			return outputJSON(cmd, ticket)
 		}
 
 		fmt.Printf("Added note to %s\n", ticket.ID)

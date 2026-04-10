@@ -27,7 +27,15 @@ func Version() string {
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print version information",
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if jsonOutput {
+			return outputJSON(cmd, map[string]string{
+				"version": version,
+				"commit":  commit,
+				"date":    date,
+			})
+		}
+
 		fmt.Printf("tk %s\n", version)
 		if commit != "none" {
 			fmt.Printf("  commit: %s\n", commit)
@@ -35,6 +43,7 @@ var versionCmd = &cobra.Command{
 		if date != "unknown" {
 			fmt.Printf("  built:  %s\n", date)
 		}
+		return nil
 	},
 }
 

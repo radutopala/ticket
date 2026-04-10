@@ -3,50 +3,14 @@ package cmd
 import (
 	"fmt"
 	"io"
-	"sort"
-	"strings"
 
 	"github.com/spf13/cobra"
 
-	"github.com/radutopala/ticket/internal/domain"
+	tk "github.com/radutopala/ticket/pkg/ticket"
 )
 
-// FilterOptions holds common filtering options for list commands.
-type FilterOptions struct {
-	Status   string
-	Assignee string
-	Tag      string
-	Type     string
-}
-
-// SortOptions holds sorting options for list commands.
-type SortOptions struct {
-	SortBy  string
-	Reverse bool
-}
-
-// validSortFields lists valid sort field names.
-var validSortFields = []string{"priority", "created", "status", "title"}
-
-// Matches checks if a ticket matches the filter options.
-func (f FilterOptions) Matches(t *domain.Ticket) bool {
-	if f.Status != "" && string(t.Status) != f.Status {
-		return false
-	}
-	if f.Assignee != "" && t.Assignee != f.Assignee {
-		return false
-	}
-	if f.Tag != "" && !hasTag(t.Tags, f.Tag) {
-		return false
-	}
-	if f.Type != "" && string(t.Type) != f.Type {
-		return false
-	}
-	return true
-}
-
-var listFlags FilterOptions
-var sortFlags SortOptions
+var listFlags tk.FilterOptions
+var sortFlags tk.SortOptions
 
 var listCmd = &cobra.Command{
 	Use:     "list",
@@ -61,8 +25,12 @@ Sort options: priority (default), created, status, title`,
 			return err
 		}
 
-		filtered := filterTickets(tickets, listFlags)
-		sortTickets(filtered, sortFlags)
+		filtered := tk.Filter(tickets, listFlags)
+		tk.Sort(filtered, sortFlags)
+
+		if jsonOutput {
+			return outputJSON(cmd, filtered)
+		}
 
 		return runWithPager(func(w io.Writer) error {
 			for _, t := range filtered {
@@ -82,7 +50,26 @@ var readyCmd = &cobra.Command{
 
 Sort options: priority (default), created, status, title`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return listByDependencyStatus(false)
+		tickets, err := store.List()
+		if err != nil {
+			return err
+		}
+
+		result := tk.FilterByDependencyStatus(tickets, false, listFlags)
+		tk.Sort(result, sortFlags)
+
+		if jsonOutput {
+			return outputJSON(cmd, result)
+		}
+
+		return runWithPager(func(w io.Writer) error {
+			for _, t := range result {
+				if _, err := fmt.Fprintln(w, formatTicketLine(t)); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
 	},
 }
 
@@ -93,7 +80,26 @@ var blockedCmd = &cobra.Command{
 
 Sort options: priority (default), created, status, title`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return listByDependencyStatus(true)
+		tickets, err := store.List()
+		if err != nil {
+			return err
+		}
+
+		result := tk.FilterByDependencyStatus(tickets, true, listFlags)
+		tk.Sort(result, sortFlags)
+
+		if jsonOutput {
+			return outputJSON(cmd, result)
+		}
+
+		return runWithPager(func(w io.Writer) error {
+			for _, t := range result {
+				if _, err := fmt.Fprintln(w, formatTicketLine(t)); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
 	},
 }
 
@@ -113,9 +119,9 @@ Sort options: priority, created (default, descending), status, title`,
 			return err
 		}
 
-		var closed []*domain.Ticket
+		var closed []*tk.Ticket
 		for _, t := range tickets {
-			if t.Status != domain.StatusClosed {
+			if t.Status != tk.StatusClosed {
 				continue
 			}
 			if listFlags.Matches(t) {
@@ -129,11 +135,15 @@ Sort options: priority, created (default, descending), status, title`,
 			opts.SortBy = "created"
 			opts.Reverse = true
 		}
-		sortTickets(closed, opts)
+		tk.Sort(closed, opts)
 
 		// Limit results
 		if closedFlags.limit > 0 && len(closed) > closedFlags.limit {
 			closed = closed[:closedFlags.limit]
+		}
+
+		if jsonOutput {
+			return outputJSON(cmd, closed)
 		}
 
 		return runWithPager(func(w io.Writer) error {
@@ -145,98 +155,6 @@ Sort options: priority, created (default, descending), status, title`,
 			return nil
 		})
 	},
-}
-
-func filterTickets(tickets []*domain.Ticket, opts FilterOptions) []*domain.Ticket {
-	var result []*domain.Ticket
-	for _, t := range tickets {
-		if opts.Matches(t) {
-			result = append(result, t)
-		}
-	}
-	return result
-}
-
-func hasTag(tags []string, tag string) bool {
-	for _, t := range tags {
-		if strings.EqualFold(t, tag) {
-			return true
-		}
-	}
-	return false
-}
-
-func sortTickets(tickets []*domain.Ticket, opts SortOptions) {
-	sortBy := opts.SortBy
-	if sortBy == "" {
-		sortBy = "priority"
-	}
-
-	sort.Slice(tickets, func(i, j int) bool {
-		var less bool
-		switch sortBy {
-		case "created":
-			less = tickets[i].Created.Before(tickets[j].Created)
-		case "status":
-			less = string(tickets[i].Status) < string(tickets[j].Status)
-		case "title":
-			less = strings.ToLower(tickets[i].Title) < strings.ToLower(tickets[j].Title)
-		default: // priority
-			if tickets[i].Priority != tickets[j].Priority {
-				less = tickets[i].Priority < tickets[j].Priority
-			} else {
-				less = tickets[i].ID < tickets[j].ID
-			}
-		}
-
-		if opts.Reverse {
-			return !less
-		}
-		return less
-	})
-}
-
-// listByDependencyStatus lists tickets filtered by their dependency status.
-// If wantBlocked is true, it lists tickets with unresolved dependencies (blocked).
-// If wantBlocked is false, it lists tickets with no unresolved dependencies (ready).
-func listByDependencyStatus(wantBlocked bool) error {
-	tickets, err := store.List()
-	if err != nil {
-		return err
-	}
-
-	openIDs := buildOpenIDSet(tickets)
-
-	var result []*domain.Ticket
-	for _, t := range tickets {
-		if t.Status == domain.StatusClosed {
-			continue
-		}
-
-		// Check if any dependency is unresolved (open)
-		hasBlockingDeps := false
-		for _, dep := range t.Deps {
-			if openIDs[dep] {
-				hasBlockingDeps = true
-				break
-			}
-		}
-
-		if hasBlockingDeps == wantBlocked && listFlags.Matches(t) {
-			result = append(result, t)
-		}
-	}
-
-	sortTickets(result, sortFlags)
-
-	return runWithPager(func(w io.Writer) error {
-		for _, t := range result {
-			if _, err := fmt.Fprintln(w, formatTicketLine(t)); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
 }
 
 func init() {

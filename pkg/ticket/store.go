@@ -1,5 +1,4 @@
-// Package storage handles file operations for tickets.
-package storage
+package ticket
 
 import (
 	"crypto/rand"
@@ -9,8 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/radutopala/ticket/internal/domain"
 )
 
 // ErrAlreadyClaimed is returned when trying to claim a ticket that is not open.
@@ -25,19 +22,27 @@ const (
 	IDRandomLength = 4
 )
 
-// Storage handles ticket file operations.
-type Storage struct {
+// Store handles ticket file operations on a .tickets/ directory.
+type Store struct {
 	ticketsDir string
 }
 
-// New creates a new Storage instance.
-func New(ticketsDir string) *Storage {
-	return &Storage{
+// Open opens a ticket store at dir/.tickets/.
+func Open(dir string) *Store {
+	return &Store{
+		ticketsDir: filepath.Join(dir, TicketsDirName),
+	}
+}
+
+// OpenDir opens a ticket store using an explicit .tickets/ directory path.
+func OpenDir(ticketsDir string) *Store {
+	return &Store{
 		ticketsDir: ticketsDir,
 	}
 }
 
-// FindTicketsDir finds the .tickets directory by walking up parent directories.
+// FindTicketsDir finds the .tickets directory by walking up parent directories
+// from the current working directory.
 func FindTicketsDir() (string, error) {
 	dir, err := os.Getwd()
 	if err != nil {
@@ -60,7 +65,7 @@ func FindTicketsDir() (string, error) {
 }
 
 // TicketsDir returns the tickets directory path.
-func (s *Storage) TicketsDir() string {
+func (s *Store) TicketsDir() string {
 	return s.ticketsDir
 }
 
@@ -74,7 +79,7 @@ func GenerateID() (string, error) {
 }
 
 // List returns all tickets in the storage directory.
-func (s *Storage) List() ([]*domain.Ticket, error) {
+func (s *Store) List() ([]*Ticket, error) {
 	entries, err := os.ReadDir(s.ticketsDir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -83,7 +88,7 @@ func (s *Storage) List() ([]*domain.Ticket, error) {
 		return nil, fmt.Errorf("failed to read tickets directory: %w", err)
 	}
 
-	var tickets []*domain.Ticket
+	var tickets []*Ticket
 	for _, entry := range entries {
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".md" {
 			continue
@@ -101,19 +106,19 @@ func (s *Storage) List() ([]*domain.Ticket, error) {
 }
 
 // Read reads a ticket by ID.
-func (s *Storage) Read(id string) (*domain.Ticket, error) {
+func (s *Store) Read(id string) (*Ticket, error) {
 	path := filepath.Join(s.ticketsDir, id+".md")
-	return domain.ParseFromFile(path)
+	return ParseFromFile(path)
 }
 
 // Write saves a ticket to storage.
-func (s *Storage) Write(ticket *domain.Ticket) error {
+func (s *Store) Write(ticket *Ticket) error {
 	path := filepath.Join(s.ticketsDir, ticket.ID+".md")
 	return ticket.WriteToFile(path)
 }
 
 // Delete removes a ticket from storage.
-func (s *Storage) Delete(id string) error {
+func (s *Store) Delete(id string) error {
 	path := filepath.Join(s.ticketsDir, id+".md")
 	if err := os.Remove(path); err != nil {
 		return fmt.Errorf("failed to delete ticket %s: %w", id, err)
@@ -122,7 +127,7 @@ func (s *Storage) Delete(id string) error {
 }
 
 // Exists checks if a ticket exists.
-func (s *Storage) Exists(id string) bool {
+func (s *Store) Exists(id string) bool {
 	path := filepath.Join(s.ticketsDir, id+".md")
 	_, err := os.Stat(path)
 	return err == nil
@@ -131,7 +136,7 @@ func (s *Storage) Exists(id string) bool {
 // ResolveID resolves a partial ID to a full ticket ID.
 // Returns the full ID if exactly one match is found.
 // Returns an error if no match or multiple matches are found.
-func (s *Storage) ResolveID(partial string) (string, error) {
+func (s *Store) ResolveID(partial string) (string, error) {
 	entries, err := os.ReadDir(s.ticketsDir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -163,7 +168,7 @@ func (s *Storage) ResolveID(partial string) (string, error) {
 }
 
 // ListIDs returns all ticket IDs.
-func (s *Storage) ListIDs() ([]string, error) {
+func (s *Store) ListIDs() ([]string, error) {
 	entries, err := os.ReadDir(s.ticketsDir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -184,14 +189,14 @@ func (s *Storage) ListIDs() ([]string, error) {
 }
 
 // EnsureDir ensures the tickets directory exists.
-func (s *Storage) EnsureDir() error {
+func (s *Store) EnsureDir() error {
 	return os.MkdirAll(s.ticketsDir, 0755)
 }
 
 // AtomicClaim atomically claims a ticket by acquiring an exclusive file lock,
 // checking the current status, and updating to in_progress only if the ticket is open.
 // Returns ErrAlreadyClaimed if the ticket is not in open status.
-func (s *Storage) AtomicClaim(id string) (*domain.Ticket, error) {
+func (s *Store) AtomicClaim(id string) (*Ticket, error) {
 	path := filepath.Join(s.ticketsDir, id+".md")
 
 	// Open file for read/write
@@ -213,18 +218,18 @@ func (s *Storage) AtomicClaim(id string) (*domain.Ticket, error) {
 		return nil, fmt.Errorf("failed to read ticket: %w", err)
 	}
 
-	ticket, err := domain.Parse(data)
+	ticket, err := Parse(data)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse ticket: %w", err)
 	}
 
 	// Check if claimable
-	if ticket.Status != domain.StatusOpen {
+	if ticket.Status != StatusOpen {
 		return nil, fmt.Errorf("%w: status is %s", ErrAlreadyClaimed, ticket.Status)
 	}
 
 	// Update status
-	ticket.Status = domain.StatusInProgress
+	ticket.Status = StatusInProgress
 
 	// Write back (truncate and write)
 	newData, err := ticket.Render()

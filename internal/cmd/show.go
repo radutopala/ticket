@@ -3,10 +3,9 @@ package cmd
 import (
 	"fmt"
 	"io"
-	"slices"
 	"strings"
 
-	"github.com/radutopala/ticket/internal/domain"
+	tk "github.com/radutopala/ticket/pkg/ticket"
 	"github.com/spf13/cobra"
 )
 
@@ -28,9 +27,13 @@ var showCmd = &cobra.Command{
 		}
 
 		// Build ticket map for O(1) lookups
-		ticketMap := make(map[string]*domain.Ticket)
+		ticketMap := make(map[string]*tk.Ticket)
 		for _, t := range allTickets {
 			ticketMap[t.ID] = t
+		}
+
+		if jsonOutput {
+			return outputJSON(cmd, ticket)
 		}
 
 		// Render the ticket content
@@ -42,13 +45,11 @@ var showCmd = &cobra.Command{
 		// Add parent comment if present
 		output := string(content)
 		if ticket.Parent != "" {
-			// Find where to insert parent comment (after links line in frontmatter)
 			lines := strings.Split(output, "\n")
 			var result []string
 			for i, line := range lines {
 				result = append(result, line)
 				if strings.HasPrefix(line, "links:") && i > 0 {
-					// Try to get parent title from pre-loaded map
 					parentTitle := ""
 					if parentTicket, ok := ticketMap[ticket.Parent]; ok {
 						parentTitle = parentTicket.Title
@@ -63,8 +64,9 @@ var showCmd = &cobra.Command{
 			output = strings.Join(result, "\n")
 		}
 
-		// Get relationships using pre-loaded tickets
-		relationships := getTicketRelationships(ticket.ID, ticket, allTickets)
+		// Get relationships
+		rel := tk.GetRelationships(ticket.ID, ticket, allTickets)
+		relationships := formatRelationships(rel)
 
 		return runWithPager(func(w io.Writer) error {
 			if _, err := fmt.Fprint(w, output); err != nil {
@@ -83,47 +85,21 @@ var showCmd = &cobra.Command{
 	},
 }
 
-// getTicketRelationships returns a string with the ticket's relationships.
-func getTicketRelationships(id string, ticket *domain.Ticket, allTickets []*domain.Ticket) string {
-	var blocking []string
-	var children []string
-
-	for _, t := range allTickets {
-		if t.ID == id {
-			continue
-		}
-
-		// Check if this ticket depends on us (we are blocking it)
-		if slices.Contains(t.Deps, id) {
-			blocking = append(blocking, t.ID)
-		}
-
-		// Check if this ticket is a child of us
-		if t.Parent == id {
-			children = append(children, t.ID)
-		}
-	}
-
+// formatRelationships formats relationships as a display string.
+func formatRelationships(rel tk.Relationships) string {
 	var lines []string
 
-	// Blockers (tickets this one depends on)
-	if len(ticket.Deps) > 0 {
-		lines = append(lines, fmt.Sprintf("Blockers: %s", strings.Join(ticket.Deps, ", ")))
+	if len(rel.Blockers) > 0 {
+		lines = append(lines, fmt.Sprintf("Blockers: %s", strings.Join(rel.Blockers, ", ")))
 	}
-
-	// Blocking (tickets that depend on this one)
-	if len(blocking) > 0 {
-		lines = append(lines, fmt.Sprintf("Blocking: %s", strings.Join(blocking, ", ")))
+	if len(rel.Blocking) > 0 {
+		lines = append(lines, fmt.Sprintf("Blocking: %s", strings.Join(rel.Blocking, ", ")))
 	}
-
-	// Children (tickets with this ticket as parent)
-	if len(children) > 0 {
-		lines = append(lines, fmt.Sprintf("Children: %s", strings.Join(children, ", ")))
+	if len(rel.Children) > 0 {
+		lines = append(lines, fmt.Sprintf("Children: %s", strings.Join(rel.Children, ", ")))
 	}
-
-	// Links (bidirectionally linked tickets)
-	if len(ticket.Links) > 0 {
-		lines = append(lines, fmt.Sprintf("Links: %s", strings.Join(ticket.Links, ", ")))
+	if len(rel.Links) > 0 {
+		lines = append(lines, fmt.Sprintf("Links: %s", strings.Join(rel.Links, ", ")))
 	}
 
 	if len(lines) == 0 {

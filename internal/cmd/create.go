@@ -8,8 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/radutopala/ticket/internal/domain"
-	"github.com/radutopala/ticket/internal/storage"
+	tk "github.com/radutopala/ticket/pkg/ticket"
 )
 
 var createFlags struct {
@@ -30,9 +29,8 @@ var createCmd = &cobra.Command{
 	Long:  `Create a new ticket with the specified title and options.`,
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Validate priority
-		if createFlags.priority < domain.MinPriority || createFlags.priority > domain.MaxPriority {
-			return fmt.Errorf("invalid priority %d: must be between %d and %d (%d=highest)", createFlags.priority, domain.MinPriority, domain.MaxPriority, domain.MinPriority)
+		if err := tk.ValidatePriority(createFlags.priority); err != nil {
+			return err
 		}
 
 		// Validate parent exists if specified
@@ -44,7 +42,7 @@ var createCmd = &cobra.Command{
 			createFlags.parent = resolvedParent
 		}
 
-		id, err := storage.GenerateID()
+		id, err := tk.GenerateID()
 		if err != nil {
 			return fmt.Errorf("failed to generate ID: %w", err)
 		}
@@ -54,9 +52,9 @@ var createCmd = &cobra.Command{
 			assignee = getGitUserName()
 		}
 
-		ticket := &domain.Ticket{
+		ticket := &tk.Ticket{
 			ID:          id,
-			Status:      domain.StatusOpen,
+			Status:      tk.StatusOpen,
 			Priority:    createFlags.priority,
 			Assignee:    assignee,
 			ExternalRef: createFlags.externalRef,
@@ -73,13 +71,13 @@ var createCmd = &cobra.Command{
 		}
 
 		if createFlags.ticketType != "" {
-			t, err := domain.ParseType(createFlags.ticketType)
+			t, err := tk.ParseType(createFlags.ticketType)
 			if err != nil {
 				return err
 			}
 			ticket.Type = t
 		} else {
-			ticket.Type = domain.TypeTask
+			ticket.Type = tk.TypeTask
 		}
 
 		if err := store.EnsureDir(); err != nil {
@@ -88,6 +86,10 @@ var createCmd = &cobra.Command{
 
 		if err := store.Write(ticket); err != nil {
 			return fmt.Errorf("failed to write ticket: %w", err)
+		}
+
+		if jsonOutput {
+			return outputJSON(cmd, ticket)
 		}
 
 		fmt.Println(id)
@@ -110,7 +112,7 @@ func init() {
 	createCmd.Flags().StringVar(&createFlags.design, "design", "", "Design notes")
 	createCmd.Flags().StringVar(&createFlags.acceptance, "acceptance", "", "Acceptance criteria")
 	createCmd.Flags().StringVarP(&createFlags.ticketType, "type", "t", "task", "Type (bug|feature|task|epic|chore)")
-	createCmd.Flags().IntVarP(&createFlags.priority, "priority", "p", domain.DefaultPriority, fmt.Sprintf("Priority %d-%d, %d=highest", domain.MinPriority, domain.MaxPriority, domain.MinPriority))
+	createCmd.Flags().IntVarP(&createFlags.priority, "priority", "p", tk.DefaultPriority, fmt.Sprintf("Priority %d-%d, %d=highest", tk.MinPriority, tk.MaxPriority, tk.MinPriority))
 	createCmd.Flags().StringVarP(&createFlags.assignee, "assignee", "a", "", "Assignee")
 	createCmd.Flags().StringVar(&createFlags.externalRef, "external-ref", "", "External reference (e.g., gh-123, JIRA-456)")
 	createCmd.Flags().StringVar(&createFlags.parent, "parent", "", "Parent ticket ID")

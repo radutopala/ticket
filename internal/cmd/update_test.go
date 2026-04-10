@@ -21,14 +21,14 @@ func TestUpdateSuite(t *testing.T) {
 
 func (s *UpdateSuite) TestExtractTarGz() {
 	tests := []struct {
-		name        string
-		createArchive func() []byte
-		wantContent string
-		wantErr     string
+		name          string
+		createArchive func(t *testing.T) []byte
+		wantContent   string
+		wantErr       string
 	}{
 		{
 			name: "extracts tk binary from tar.gz",
-			createArchive: func() []byte {
+			createArchive: func(t *testing.T) []byte {
 				var buf bytes.Buffer
 				gw := gzip.NewWriter(&buf)
 				tw := tar.NewWriter(gw)
@@ -40,10 +40,11 @@ func (s *UpdateSuite) TestExtractTarGz() {
 					Size:     int64(len(content)),
 					Typeflag: tar.TypeReg,
 				}
-				tw.WriteHeader(hdr)
-				tw.Write(content)
-				tw.Close()
-				gw.Close()
+				require.NoError(t, tw.WriteHeader(hdr))
+				_, err := tw.Write(content)
+				require.NoError(t, err)
+				require.NoError(t, tw.Close())
+				require.NoError(t, gw.Close())
 
 				return buf.Bytes()
 			},
@@ -51,7 +52,7 @@ func (s *UpdateSuite) TestExtractTarGz() {
 		},
 		{
 			name: "extracts tk binary from nested path",
-			createArchive: func() []byte {
+			createArchive: func(t *testing.T) []byte {
 				var buf bytes.Buffer
 				gw := gzip.NewWriter(&buf)
 				tw := tar.NewWriter(gw)
@@ -63,10 +64,11 @@ func (s *UpdateSuite) TestExtractTarGz() {
 					Size:     int64(len(content)),
 					Typeflag: tar.TypeReg,
 				}
-				tw.WriteHeader(hdr)
-				tw.Write(content)
-				tw.Close()
-				gw.Close()
+				require.NoError(t, tw.WriteHeader(hdr))
+				_, err := tw.Write(content)
+				require.NoError(t, err)
+				require.NoError(t, tw.Close())
+				require.NoError(t, gw.Close())
 
 				return buf.Bytes()
 			},
@@ -74,7 +76,7 @@ func (s *UpdateSuite) TestExtractTarGz() {
 		},
 		{
 			name: "returns error when tk binary not found",
-			createArchive: func() []byte {
+			createArchive: func(t *testing.T) []byte {
 				var buf bytes.Buffer
 				gw := gzip.NewWriter(&buf)
 				tw := tar.NewWriter(gw)
@@ -86,10 +88,11 @@ func (s *UpdateSuite) TestExtractTarGz() {
 					Size:     int64(len(content)),
 					Typeflag: tar.TypeReg,
 				}
-				tw.WriteHeader(hdr)
-				tw.Write(content)
-				tw.Close()
-				gw.Close()
+				require.NoError(t, tw.WriteHeader(hdr))
+				_, err := tw.Write(content)
+				require.NoError(t, err)
+				require.NoError(t, tw.Close())
+				require.NoError(t, gw.Close())
 
 				return buf.Bytes()
 			},
@@ -97,7 +100,7 @@ func (s *UpdateSuite) TestExtractTarGz() {
 		},
 		{
 			name: "skips directories",
-			createArchive: func() []byte {
+			createArchive: func(t *testing.T) []byte {
 				var buf bytes.Buffer
 				gw := gzip.NewWriter(&buf)
 				tw := tar.NewWriter(gw)
@@ -108,7 +111,7 @@ func (s *UpdateSuite) TestExtractTarGz() {
 					Mode:     0755,
 					Typeflag: tar.TypeDir,
 				}
-				tw.WriteHeader(dirHdr)
+				require.NoError(t, tw.WriteHeader(dirHdr))
 
 				// Add the actual binary
 				content := []byte("actual binary")
@@ -118,10 +121,11 @@ func (s *UpdateSuite) TestExtractTarGz() {
 					Size:     int64(len(content)),
 					Typeflag: tar.TypeReg,
 				}
-				tw.WriteHeader(hdr)
-				tw.Write(content)
-				tw.Close()
-				gw.Close()
+				require.NoError(t, tw.WriteHeader(hdr))
+				_, err := tw.Write(content)
+				require.NoError(t, err)
+				require.NoError(t, tw.Close())
+				require.NoError(t, gw.Close())
 
 				return buf.Bytes()
 			},
@@ -131,7 +135,7 @@ func (s *UpdateSuite) TestExtractTarGz() {
 
 	for _, tt := range tests {
 		s.Run(tt.name, func() {
-			archive := tt.createArchive()
+			archive := tt.createArchive(s.T())
 			var out bytes.Buffer
 			err := extractTarGz(bytes.NewReader(archive), &out)
 
@@ -155,19 +159,21 @@ func (s *UpdateSuite) TestExtractTarGzInvalidGzip() {
 func (s *UpdateSuite) TestExtractZip() {
 	tests := []struct {
 		name          string
-		createArchive func() []byte
+		createArchive func(t *testing.T) []byte
 		wantContent   string
 		wantErr       string
 	}{
 		{
 			name: "extracts tk.exe binary from zip",
-			createArchive: func() []byte {
+			createArchive: func(t *testing.T) []byte {
 				var buf bytes.Buffer
 				zw := zip.NewWriter(&buf)
 
-				w, _ := zw.Create("tk.exe")
-				w.Write([]byte("tk.exe binary content"))
-				zw.Close()
+				w, err := zw.Create("tk.exe")
+				require.NoError(t, err)
+				_, err = w.Write([]byte("tk.exe binary content"))
+				require.NoError(t, err)
+				require.NoError(t, zw.Close())
 
 				return buf.Bytes()
 			},
@@ -175,13 +181,15 @@ func (s *UpdateSuite) TestExtractZip() {
 		},
 		{
 			name: "extracts tk.exe from nested path",
-			createArchive: func() []byte {
+			createArchive: func(t *testing.T) []byte {
 				var buf bytes.Buffer
 				zw := zip.NewWriter(&buf)
 
-				w, _ := zw.Create("tk_1.0.0_windows_amd64/tk.exe")
-				w.Write([]byte("nested tk.exe binary"))
-				zw.Close()
+				w, err := zw.Create("tk_1.0.0_windows_amd64/tk.exe")
+				require.NoError(t, err)
+				_, err = w.Write([]byte("nested tk.exe binary"))
+				require.NoError(t, err)
+				require.NoError(t, zw.Close())
 
 				return buf.Bytes()
 			},
@@ -189,13 +197,15 @@ func (s *UpdateSuite) TestExtractZip() {
 		},
 		{
 			name: "returns error when tk.exe not found",
-			createArchive: func() []byte {
+			createArchive: func(t *testing.T) []byte {
 				var buf bytes.Buffer
 				zw := zip.NewWriter(&buf)
 
-				w, _ := zw.Create("other-file.txt")
-				w.Write([]byte("other content"))
-				zw.Close()
+				w, err := zw.Create("other-file.txt")
+				require.NoError(t, err)
+				_, err = w.Write([]byte("other content"))
+				require.NoError(t, err)
+				require.NoError(t, zw.Close())
 
 				return buf.Bytes()
 			},
@@ -203,17 +213,20 @@ func (s *UpdateSuite) TestExtractZip() {
 		},
 		{
 			name: "skips directories",
-			createArchive: func() []byte {
+			createArchive: func(t *testing.T) []byte {
 				var buf bytes.Buffer
 				zw := zip.NewWriter(&buf)
 
 				// Add directory
-				zw.Create("tk/")
+				_, err := zw.Create("tk/")
+				require.NoError(t, err)
 
 				// Add the actual binary
-				w, _ := zw.Create("tk/tk.exe")
-				w.Write([]byte("actual binary"))
-				zw.Close()
+				w, err := zw.Create("tk/tk.exe")
+				require.NoError(t, err)
+				_, err = w.Write([]byte("actual binary"))
+				require.NoError(t, err)
+				require.NoError(t, zw.Close())
 
 				return buf.Bytes()
 			},
@@ -223,7 +236,7 @@ func (s *UpdateSuite) TestExtractZip() {
 
 	for _, tt := range tests {
 		s.Run(tt.name, func() {
-			archive := tt.createArchive()
+			archive := tt.createArchive(s.T())
 			var out bytes.Buffer
 			err := extractZip(bytes.NewReader(archive), &out)
 

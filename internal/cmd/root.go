@@ -9,14 +9,14 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/radutopala/ticket/internal/config"
-	"github.com/radutopala/ticket/internal/domain"
-	"github.com/radutopala/ticket/internal/storage"
+	tk "github.com/radutopala/ticket/pkg/ticket"
 )
 
 var (
-	cfg     *config.Config
-	logger  *slog.Logger
-	store   *storage.Storage
+	cfg        *config.Config
+	logger     *slog.Logger
+	store      *tk.Store
+	jsonOutput bool
 )
 
 var rootCmd = &cobra.Command{
@@ -37,7 +37,7 @@ var rootCmd = &cobra.Command{
 			Level: slog.LevelInfo,
 		}))
 
-		store = storage.New(cfg.TicketsDir)
+		store = tk.OpenDir(cfg.TicketsDir)
 
 		return nil
 	},
@@ -125,12 +125,15 @@ Available Commands:
   version                  Print version information
   update                   Update tk to the latest version
 
+Global Flags:
+  --json                 Output as JSON (works with all commands)
+
 Use "tk [command] --help" for more information about a command.
 
 Tickets stored as markdown files in .tickets/
 Supports partial ID matching (e.g., 'tk show 5c4' matches 'nw-5c46')
 `
-	fmt.Printf(helpText, domain.MinPriority, domain.MaxPriority, domain.MinPriority, domain.DefaultPriority)
+	fmt.Printf(helpText, tk.MinPriority, tk.MaxPriority, tk.MinPriority, tk.DefaultPriority)
 }
 
 // GetConfig returns the loaded configuration.
@@ -144,11 +147,13 @@ func GetLogger() *slog.Logger {
 }
 
 // GetStorage returns the storage instance.
-func GetStorage() *storage.Storage {
+func GetStorage() *tk.Store {
 	return store
 }
 
 func init() {
+	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output as JSON")
+
 	// Store the default help function before overriding
 	defaultHelp := rootCmd.HelpFunc()
 	rootCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {

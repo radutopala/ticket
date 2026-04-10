@@ -1,5 +1,15 @@
-// Package domain contains core domain models.
-package domain
+// Package ticket provides a filesystem-backed ticket management library.
+//
+// Tickets are stored as markdown files with YAML frontmatter in a .tickets/
+// directory. Each ticket has an ID, status, type, priority, tags, dependencies,
+// and markdown body sections (title, description, design, acceptance criteria, notes).
+//
+// Usage:
+//
+//	store, err := ticket.Open("/path/to/project")
+//	tickets, err := store.List()
+//	t, err := store.Get("tic-abc1")
+package ticket
 
 import (
 	"bufio"
@@ -115,6 +125,14 @@ const (
 	DefaultPriority = 2
 )
 
+// ValidatePriority checks if a priority value is within the valid range.
+func ValidatePriority(priority int) error {
+	if priority < MinPriority || priority > MaxPriority {
+		return fmt.Errorf("invalid priority %d: must be between %d and %d (%d=highest)", priority, MinPriority, MaxPriority, MinPriority)
+	}
+	return nil
+}
+
 // Note represents a timestamped note on a ticket.
 type Note struct {
 	Timestamp time.Time
@@ -166,7 +184,7 @@ func Parse(data []byte) (*Ticket, error) {
 		return nil, fmt.Errorf("failed to parse frontmatter: %w", err)
 	}
 
-	ticket.ParseMarkdownBody(string(body))
+	ticket.parseMarkdownBody(string(body))
 
 	return &ticket, nil
 }
@@ -200,13 +218,13 @@ func (t *Ticket) Render() ([]byte, error) {
 	buf.WriteString("---\n")
 
 	// Write body
-	buf.WriteString(t.RenderMarkdownBody())
+	buf.WriteString(t.renderMarkdownBody())
 
 	return buf.Bytes(), nil
 }
 
-// ParseMarkdownBody parses the markdown body and populates body fields.
-func (t *Ticket) ParseMarkdownBody(content string) {
+// parseMarkdownBody parses the markdown body and populates body fields.
+func (t *Ticket) parseMarkdownBody(content string) {
 	scanner := bufio.NewScanner(strings.NewReader(content))
 	var currentSection string
 	var sectionContent strings.Builder
@@ -273,8 +291,8 @@ func (t *Ticket) ParseMarkdownBody(content string) {
 	flushSection()
 }
 
-// RenderMarkdownBody renders the body fields as markdown.
-func (t *Ticket) RenderMarkdownBody() string {
+// renderMarkdownBody renders the body fields as markdown.
+func (t *Ticket) renderMarkdownBody() string {
 	var buf strings.Builder
 
 	// Title
@@ -308,7 +326,7 @@ func (t *Ticket) RenderMarkdownBody() string {
 	if len(t.Notes) > 0 {
 		buf.WriteString("## Notes\n\n")
 		for _, note := range t.Notes {
-			buf.WriteString(fmt.Sprintf("### %s\n\n", note.Timestamp.Format(time.RFC3339)))
+			fmt.Fprintf(&buf, "### %s\n\n", note.Timestamp.Format(time.RFC3339))
 			buf.WriteString(note.Content)
 			buf.WriteString("\n\n")
 		}
@@ -327,13 +345,10 @@ func splitFrontmatter(data []byte) ([]byte, []byte, error) {
 
 	content = content[4:] // Skip first "---\n"
 
-	idx := strings.Index(content, "\n---\n")
-	if idx == -1 {
+	frontmatter, body, found := strings.Cut(content, "\n---\n")
+	if !found {
 		return nil, nil, fmt.Errorf("missing closing frontmatter delimiter")
 	}
-
-	frontmatter := content[:idx]
-	body := content[idx+5:] // Skip "\n---\n"
 
 	return []byte(frontmatter), []byte(body), nil
 }

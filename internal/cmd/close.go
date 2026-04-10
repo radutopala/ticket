@@ -3,7 +3,7 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/radutopala/ticket/internal/domain"
+	tk "github.com/radutopala/ticket/pkg/ticket"
 )
 
 var closeCmd = &cobra.Command{
@@ -12,6 +12,6 @@ var closeCmd = &cobra.Command{
 	Long:  `Set the ticket status to closed. Supports partial ID matching.`,
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return updateTicketStatus(args[0], domain.StatusClosed)
+		return updateTicketStatus(cmd, args[0], tk.StatusClosed)
 	},
 }
