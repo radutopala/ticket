@@ -51,3 +51,33 @@ func updateTicketStatus(cmd *cobra.Command, idArg string, newStatus tk.Status) e
 func formatTicketLine(t *tk.Ticket) string {
 	return fmt.Sprintf("%s [P%d][%s] - %s", t.ID, t.Priority, t.Status, t.Title)
 }
+
+// runSetFieldCommand resolves the ID, invokes setter, and prints the result.
+// Used by simple `<cmd> <id> [ref]` commands that update a single string field.
+func runSetFieldCommand(cmd *cobra.Command, args []string, label string, setter func(id, ref string) (*tk.Ticket, error)) error {
+	id, err := store.ResolveID(args[0])
+	if err != nil {
+		return err
+	}
+
+	ref := ""
+	if len(args) == 2 {
+		ref = args[1]
+	}
+
+	ticket, err := setter(id, ref)
+	if err != nil {
+		return fmt.Errorf("failed to update ticket: %w", err)
+	}
+
+	if jsonOutput {
+		return outputJSON(cmd, ticket)
+	}
+
+	if ref == "" {
+		fmt.Printf("Cleared %s on %s\n", label, ticket.ID)
+	} else {
+		fmt.Printf("Updated %s %s -> %s\n", ticket.ID, label, ref)
+	}
+	return nil
+}
