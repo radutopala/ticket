@@ -139,6 +139,7 @@ Then use `/tk` to get a comprehensive command reference and workflow guide.
 | `create [title]` | Create a new ticket (outputs ID) |
 | `show <id>` | Display ticket details |
 | `edit <id>` | Open ticket in $EDITOR |
+| `external-ref <id> [ref]` | Set or clear external reference (omit ref to clear) |
 | `start <id>` | Mark as in_progress |
 | `close <id>` | Mark as closed |
 | `reopen <id>` | Revert to open status |
@@ -287,6 +288,7 @@ tk create "My ticket" --json      # Returns full ticket object
 tk list --json                    # Returns array of tickets
 tk show <id> --json               # Returns single ticket
 tk start <id> --json              # Returns updated ticket
+tk external-ref <id> ref --json   # Returns updated ticket
 tk dep check --json               # Returns {cycles, count}
 tk search "query" --json          # Returns array of search matches
 tk stats --json                   # Returns stats object
@@ -399,6 +401,10 @@ ticket := &tk.Ticket{
     Type:   tk.TypeBug,
 }
 store.Write(ticket)
+
+// Update individual fields after creation
+store.SetExternalRef("tic-abc1", "JIRA-456")
+store.SetExternalRef("tic-abc1", "") // pass empty to clear
 
 // Dependency management
 tk.AddDep(ticket, "tic-dep1", allTickets) // cycle-safe

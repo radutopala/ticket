@@ -844,6 +844,89 @@ func (s *CmdSuite) TestCreateWithExternalRef() {
 	require.Equal(s.T(), "gh-123", ticket.ExternalRef)
 }
 
+func (s *CmdSuite) TestExternalRefCommandSetsValue() {
+	s.createTestTicket("tic-extref-set", tk.StatusOpen, "Ticket")
+
+	output, err := s.executeCommand("external-ref", "tic-extref-set", "JIRA-456")
+
+	require.NoError(s.T(), err)
+	require.Contains(s.T(), output, "JIRA-456")
+
+	ticket, err := store.Read("tic-extref-set")
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), "JIRA-456", ticket.ExternalRef)
+}
+
+func (s *CmdSuite) TestExternalRefCommandUpdatesValue() {
+	t := s.createTestTicket("tic-extref-upd", tk.StatusOpen, "Ticket")
+	t.ExternalRef = "gh-1"
+	require.NoError(s.T(), store.Write(t))
+
+	_, err := s.executeCommand("external-ref", "tic-extref-upd", "gh-2")
+	require.NoError(s.T(), err)
+
+	ticket, err := store.Read("tic-extref-upd")
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), "gh-2", ticket.ExternalRef)
+}
+
+func (s *CmdSuite) TestExternalRefCommandClearsWhenOmitted() {
+	t := s.createTestTicket("tic-extref-clr", tk.StatusOpen, "Ticket")
+	t.ExternalRef = "gh-9"
+	require.NoError(s.T(), store.Write(t))
+
+	output, err := s.executeCommand("external-ref", "tic-extref-clr")
+
+	require.NoError(s.T(), err)
+	require.Contains(s.T(), output, "Cleared")
+
+	ticket, err := store.Read("tic-extref-clr")
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), "", ticket.ExternalRef)
+}
+
+func (s *CmdSuite) TestExternalRefCommandClearsWhenEmpty() {
+	t := s.createTestTicket("tic-extref-empty", tk.StatusOpen, "Ticket")
+	t.ExternalRef = "gh-9"
+	require.NoError(s.T(), store.Write(t))
+
+	_, err := s.executeCommand("external-ref", "tic-extref-empty", "")
+	require.NoError(s.T(), err)
+
+	ticket, err := store.Read("tic-extref-empty")
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), "", ticket.ExternalRef)
+}
+
+func (s *CmdSuite) TestExternalRefCommandPartialID() {
+	s.createTestTicket("tic-extref-partial", tk.StatusOpen, "Ticket")
+
+	_, err := s.executeCommand("external-ref", "extref-partial", "ref-x")
+	require.NoError(s.T(), err)
+
+	ticket, err := store.Read("tic-extref-partial")
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), "ref-x", ticket.ExternalRef)
+}
+
+func (s *CmdSuite) TestExternalRefCommandNotFound() {
+	_, err := s.executeCommand("external-ref", "nonexistent", "ref")
+	require.Error(s.T(), err)
+	require.Contains(s.T(), err.Error(), "not found")
+}
+
+func (s *CmdSuite) TestExternalRefCommandJSON() {
+	s.createTestTicket("tic-extrefjson", tk.StatusOpen, "ExtRef JSON Test")
+
+	output, err := s.executeCommand("external-ref", "--json", "tic-extrefjson", "JIRA-9")
+
+	require.NoError(s.T(), err)
+	var t tk.Ticket
+	require.NoError(s.T(), json.Unmarshal([]byte(output), &t))
+	require.Equal(s.T(), "tic-extrefjson", t.ID)
+	require.Equal(s.T(), "JIRA-9", t.ExternalRef)
+}
+
 func (s *CmdSuite) TestCreateWithTags() {
 	output, err := s.executeCommand("create", "Tagged Ticket", "--tags", "backend,urgent,api")
 

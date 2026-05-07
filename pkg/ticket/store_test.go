@@ -348,6 +348,63 @@ func (s *StoreSuite) TestDelete_NonExistent() {
 	require.Contains(s.T(), err.Error(), "failed to delete ticket")
 }
 
+func (s *StoreSuite) TestSetExternalRef_Sets() {
+	ticket := &Ticket{
+		ID:      "tic-ext1",
+		Status:  StatusOpen,
+		Title:   "ExtRef Set",
+		Created: time.Now().UTC(),
+	}
+	require.NoError(s.T(), s.store.Write(ticket))
+
+	updated, err := s.store.SetExternalRef("tic-ext1", "JIRA-456")
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), "JIRA-456", updated.ExternalRef)
+
+	read, err := s.store.Read("tic-ext1")
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), "JIRA-456", read.ExternalRef)
+}
+
+func (s *StoreSuite) TestSetExternalRef_Overwrites() {
+	ticket := &Ticket{
+		ID:          "tic-ext2",
+		Status:      StatusOpen,
+		ExternalRef: "gh-1",
+		Title:       "ExtRef Overwrite",
+		Created:     time.Now().UTC(),
+	}
+	require.NoError(s.T(), s.store.Write(ticket))
+
+	updated, err := s.store.SetExternalRef("tic-ext2", "gh-2")
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), "gh-2", updated.ExternalRef)
+}
+
+func (s *StoreSuite) TestSetExternalRef_ClearsWhenEmpty() {
+	ticket := &Ticket{
+		ID:          "tic-ext3",
+		Status:      StatusOpen,
+		ExternalRef: "gh-9",
+		Title:       "ExtRef Clear",
+		Created:     time.Now().UTC(),
+	}
+	require.NoError(s.T(), s.store.Write(ticket))
+
+	updated, err := s.store.SetExternalRef("tic-ext3", "")
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), "", updated.ExternalRef)
+
+	read, err := s.store.Read("tic-ext3")
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), "", read.ExternalRef)
+}
+
+func (s *StoreSuite) TestSetExternalRef_NotFound() {
+	_, err := s.store.SetExternalRef("nonexistent", "ref")
+	require.Error(s.T(), err)
+}
+
 func (s *StoreSuite) TestAtomicClaim_FileNotFound() {
 	_, err := s.store.AtomicClaim("nonexistent-ticket")
 	require.Error(s.T(), err)

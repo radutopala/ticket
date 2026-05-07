@@ -193,6 +193,23 @@ func (s *Store) EnsureDir() error {
 	return os.MkdirAll(s.ticketsDir, 0755)
 }
 
+// SetExternalRef sets the external-ref field on a ticket. An empty ref clears it.
+// Returns the updated ticket.
+func (s *Store) SetExternalRef(id, ref string) (*Ticket, error) {
+	ticket, err := s.Read(id)
+	if err != nil {
+		return nil, err
+	}
+
+	ticket.ExternalRef = ref
+
+	if err := s.Write(ticket); err != nil {
+		return nil, fmt.Errorf("failed to write ticket: %w", err)
+	}
+
+	return ticket, nil
+}
+
 // AtomicClaim atomically claims a ticket by acquiring an exclusive file lock,
 // checking the current status, and updating to in_progress only if the ticket is open.
 // Returns ErrAlreadyClaimed if the ticket is not in open status.
