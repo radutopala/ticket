@@ -63,11 +63,13 @@ Available Commands:
     -p, --priority         Priority %d-%d, %d=highest [default: %d]
     -a, --assignee         Assignee
     --external-ref         External reference (e.g., gh-123, JIRA-456)
+    --pr                   Pull/merge request reference (e.g., gh-pr-42, !123, URL)
     --parent               Parent ticket ID
     --tags                 Comma-separated tags (e.g., --tags ui,backend,urgent)
   show <id>                Display a ticket
   edit <id>                Open ticket in editor
   external-ref <id> [ref]  Set or clear ticket external reference (omit ref to clear)
+  pr <id> [ref]            Set or clear ticket PR/MR reference (omit ref to clear)
   start <id>               Set ticket status to in_progress
   close <id>               Set ticket status to closed
   reopen <id>              Set ticket status to open
@@ -169,6 +171,7 @@ func init() {
 	rootCmd.AddCommand(showCmd)
 	rootCmd.AddCommand(editCmd)
 	rootCmd.AddCommand(externalRefCmd)
+	rootCmd.AddCommand(prCmd)
 	rootCmd.AddCommand(startCmd)
 	rootCmd.AddCommand(closeCmd)
 	rootCmd.AddCommand(reopenCmd)

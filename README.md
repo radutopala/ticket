@@ -140,6 +140,7 @@ Then use `/tk` to get a comprehensive command reference and workflow guide.
 | `show <id>` | Display ticket details |
 | `edit <id>` | Open ticket in $EDITOR |
 | `external-ref <id> [ref]` | Set or clear external reference (omit ref to clear) |
+| `pr <id> [ref]` | Set or clear PR/MR reference (omit ref to clear) |
 | `start <id>` | Mark as in_progress |
 | `close <id>` | Mark as closed |
 | `reopen <id>` | Revert to open status |
@@ -156,6 +157,7 @@ tk create "My ticket title" \
   -p 1 \                 # Priority 0-4, 0=highest (default: 2)
   -a "John Doe" \        # Assignee (defaults to git user.name)
   --external-ref gh-123 \# External reference (e.g., JIRA-456)
+  --pr gh-pr-42 \        # Pull/merge request reference (e.g., !123, URL)
   --parent tic-abc1 \    # Parent ticket ID
   --tags backend,urgent  # Comma-separated tags
 ```
@@ -289,6 +291,7 @@ tk list --json                    # Returns array of tickets
 tk show <id> --json               # Returns single ticket
 tk start <id> --json              # Returns updated ticket
 tk external-ref <id> ref --json   # Returns updated ticket
+tk pr <id> ref --json             # Returns updated ticket
 tk dep check --json               # Returns {cycles, count}
 tk search "query" --json          # Returns array of search matches
 tk stats --json                   # Returns stats object
@@ -405,6 +408,8 @@ store.Write(ticket)
 // Update individual fields after creation
 store.SetExternalRef("tic-abc1", "JIRA-456")
 store.SetExternalRef("tic-abc1", "") // pass empty to clear
+store.SetPR("tic-abc1", "gh-pr-42")
+store.SetPR("tic-abc1", "")          // pass empty to clear
 
 // Dependency management
 tk.AddDep(ticket, "tic-dep1", allTickets) // cycle-safe

@@ -25,6 +25,7 @@ type importTicket struct {
 	Assignee    string    `json:"Assignee"`
 	Parent      string    `json:"Parent"`
 	ExternalRef string    `json:"ExternalRef"`
+	PR          string    `json:"PR"`
 	Tags        []string  `json:"Tags"`
 	Deps        []string  `json:"Deps"`
 	Links       []string  `json:"Links"`
@@ -173,6 +174,7 @@ func convertImportTicket(t importTicket) (*tk.Ticket, error) {
 		Assignee:    t.Assignee,
 		Parent:      t.Parent,
 		ExternalRef: t.ExternalRef,
+		PR:          t.PR,
 		Tags:        t.Tags,
 		Deps:        t.Deps,
 		Links:       t.Links,
