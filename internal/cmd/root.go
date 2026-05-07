@@ -67,6 +67,7 @@ Available Commands:
     --tags                 Comma-separated tags (e.g., --tags ui,backend,urgent)
   show <id>                Display a ticket
   edit <id>                Open ticket in editor
+  external-ref <id> [ref]  Set or clear ticket external reference (omit ref to clear)
   start <id>               Set ticket status to in_progress
   close <id>               Set ticket status to closed
   reopen <id>              Set ticket status to open
@@ -167,6 +168,7 @@ func init() {
 	rootCmd.AddCommand(createCmd)
 	rootCmd.AddCommand(showCmd)
 	rootCmd.AddCommand(editCmd)
+	rootCmd.AddCommand(externalRefCmd)
 	rootCmd.AddCommand(startCmd)
 	rootCmd.AddCommand(closeCmd)
 	rootCmd.AddCommand(reopenCmd)
