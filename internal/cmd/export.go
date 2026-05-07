@@ -73,6 +73,7 @@ func exportCSV(w io.Writer, tickets any) error {
 		Assignee    string
 		Parent      string
 		ExternalRef string
+		PR          string
 		Tags        []string
 		Deps        []string
 		Links       []string
@@ -103,7 +104,7 @@ func exportCSV(w io.Writer, tickets any) error {
 	// CSV header
 	headers := []string{
 		"ID", "Status", "Type", "Priority", "Assignee", "Parent",
-		"ExternalRef", "Tags", "Deps", "Links", "Created",
+		"ExternalRef", "PR", "Tags", "Deps", "Links", "Created",
 		"Title", "Description", "Design", "Acceptance",
 	}
 	if err := csvWriter.Write(headers); err != nil {
@@ -120,6 +121,7 @@ func exportCSV(w io.Writer, tickets any) error {
 			getString(t, "Assignee"),
 			getString(t, "Parent"),
 			getString(t, "ExternalRef"),
+			getString(t, "PR"),
 			joinStrings(t, "Tags"),
 			joinStrings(t, "Deps"),
 			joinStrings(t, "Links"),

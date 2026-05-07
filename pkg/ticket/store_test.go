@@ -405,6 +405,63 @@ func (s *StoreSuite) TestSetExternalRef_NotFound() {
 	require.Error(s.T(), err)
 }
 
+func (s *StoreSuite) TestSetPR_Sets() {
+	ticket := &Ticket{
+		ID:      "tic-pr1",
+		Status:  StatusOpen,
+		Title:   "PR Set",
+		Created: time.Now().UTC(),
+	}
+	require.NoError(s.T(), s.store.Write(ticket))
+
+	updated, err := s.store.SetPR("tic-pr1", "gh-pr-42")
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), "gh-pr-42", updated.PR)
+
+	read, err := s.store.Read("tic-pr1")
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), "gh-pr-42", read.PR)
+}
+
+func (s *StoreSuite) TestSetPR_Overwrites() {
+	ticket := &Ticket{
+		ID:      "tic-pr2",
+		Status:  StatusOpen,
+		PR:      "!1",
+		Title:   "PR Overwrite",
+		Created: time.Now().UTC(),
+	}
+	require.NoError(s.T(), s.store.Write(ticket))
+
+	updated, err := s.store.SetPR("tic-pr2", "!2")
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), "!2", updated.PR)
+}
+
+func (s *StoreSuite) TestSetPR_ClearsWhenEmpty() {
+	ticket := &Ticket{
+		ID:      "tic-pr3",
+		Status:  StatusOpen,
+		PR:      "gh-pr-9",
+		Title:   "PR Clear",
+		Created: time.Now().UTC(),
+	}
+	require.NoError(s.T(), s.store.Write(ticket))
+
+	updated, err := s.store.SetPR("tic-pr3", "")
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), "", updated.PR)
+
+	read, err := s.store.Read("tic-pr3")
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), "", read.PR)
+}
+
+func (s *StoreSuite) TestSetPR_NotFound() {
+	_, err := s.store.SetPR("nonexistent", "ref")
+	require.Error(s.T(), err)
+}
+
 func (s *StoreSuite) TestAtomicClaim_FileNotFound() {
 	_, err := s.store.AtomicClaim("nonexistent-ticket")
 	require.Error(s.T(), err)

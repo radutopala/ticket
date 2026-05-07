@@ -25,7 +25,7 @@ Examples:
   tk query '[.[] | select(.Deps | length > 0)]'       # Tickets with deps
   tk query '.[] | {id: .ID, title: .Title}'   # Custom output format
 
-JSON fields: ID, Status, Type, Priority, Assignee, Parent, ExternalRef,
+JSON fields: ID, Status, Type, Priority, Assignee, Parent, ExternalRef, PR,
              Tags, Deps, Links, Created, Title, Description, Design,
              Acceptance, Notes`,
 	Args: cobra.MaximumNArgs(1),

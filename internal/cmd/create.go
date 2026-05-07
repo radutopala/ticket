@@ -19,6 +19,7 @@ var createFlags struct {
 	priority    int
 	assignee    string
 	externalRef string
+	pr          string
 	parent      string
 	tags        []string
 }
@@ -58,6 +59,7 @@ var createCmd = &cobra.Command{
 			Priority:    createFlags.priority,
 			Assignee:    assignee,
 			ExternalRef: createFlags.externalRef,
+			PR:          createFlags.pr,
 			Parent:      createFlags.parent,
 			Tags:        createFlags.tags,
 			Created:     time.Now().UTC(),
@@ -115,6 +117,7 @@ func init() {
 	createCmd.Flags().IntVarP(&createFlags.priority, "priority", "p", tk.DefaultPriority, fmt.Sprintf("Priority %d-%d, %d=highest", tk.MinPriority, tk.MaxPriority, tk.MinPriority))
 	createCmd.Flags().StringVarP(&createFlags.assignee, "assignee", "a", "", "Assignee")
 	createCmd.Flags().StringVar(&createFlags.externalRef, "external-ref", "", "External reference (e.g., gh-123, JIRA-456)")
+	createCmd.Flags().StringVar(&createFlags.pr, "pr", "", "Pull/merge request reference (e.g., gh-pr-42, !123, URL)")
 	createCmd.Flags().StringVar(&createFlags.parent, "parent", "", "Parent ticket ID")
 	createCmd.Flags().StringSliceVar(&createFlags.tags, "tags", nil, "Comma-separated tags")
 }

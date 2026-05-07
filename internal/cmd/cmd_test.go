@@ -50,6 +50,7 @@ func (s *CmdSuite) SetupTest() {
 	createFlags.priority = 2
 	createFlags.assignee = ""
 	createFlags.externalRef = ""
+	createFlags.pr = ""
 	createFlags.parent = ""
 	createFlags.tags = nil
 	exportFlags.format = "json"
@@ -925,6 +926,99 @@ func (s *CmdSuite) TestExternalRefCommandJSON() {
 	require.NoError(s.T(), json.Unmarshal([]byte(output), &t))
 	require.Equal(s.T(), "tic-extrefjson", t.ID)
 	require.Equal(s.T(), "JIRA-9", t.ExternalRef)
+}
+
+func (s *CmdSuite) TestCreateWithPR() {
+	output, err := s.executeCommand("create", "PR Ticket", "--pr", "gh-pr-7")
+
+	require.NoError(s.T(), err)
+	id := strings.TrimSpace(output)
+	ticket, err := store.Read(id)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), "gh-pr-7", ticket.PR)
+}
+
+func (s *CmdSuite) TestPRCommandSetsValue() {
+	s.createTestTicket("tic-pr-set", tk.StatusOpen, "Ticket")
+
+	output, err := s.executeCommand("pr", "tic-pr-set", "gh-pr-42")
+
+	require.NoError(s.T(), err)
+	require.Contains(s.T(), output, "gh-pr-42")
+
+	ticket, err := store.Read("tic-pr-set")
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), "gh-pr-42", ticket.PR)
+}
+
+func (s *CmdSuite) TestPRCommandUpdatesValue() {
+	t := s.createTestTicket("tic-pr-upd", tk.StatusOpen, "Ticket")
+	t.PR = "gh-pr-1"
+	require.NoError(s.T(), store.Write(t))
+
+	_, err := s.executeCommand("pr", "tic-pr-upd", "gh-pr-2")
+	require.NoError(s.T(), err)
+
+	ticket, err := store.Read("tic-pr-upd")
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), "gh-pr-2", ticket.PR)
+}
+
+func (s *CmdSuite) TestPRCommandClearsWhenOmitted() {
+	t := s.createTestTicket("tic-pr-clr", tk.StatusOpen, "Ticket")
+	t.PR = "gh-pr-9"
+	require.NoError(s.T(), store.Write(t))
+
+	output, err := s.executeCommand("pr", "tic-pr-clr")
+
+	require.NoError(s.T(), err)
+	require.Contains(s.T(), output, "Cleared")
+
+	ticket, err := store.Read("tic-pr-clr")
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), "", ticket.PR)
+}
+
+func (s *CmdSuite) TestPRCommandClearsWhenEmpty() {
+	t := s.createTestTicket("tic-pr-empty", tk.StatusOpen, "Ticket")
+	t.PR = "gh-pr-9"
+	require.NoError(s.T(), store.Write(t))
+
+	_, err := s.executeCommand("pr", "tic-pr-empty", "")
+	require.NoError(s.T(), err)
+
+	ticket, err := store.Read("tic-pr-empty")
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), "", ticket.PR)
+}
+
+func (s *CmdSuite) TestPRCommandPartialID() {
+	s.createTestTicket("tic-pr-partial", tk.StatusOpen, "Ticket")
+
+	_, err := s.executeCommand("pr", "pr-partial", "ref-x")
+	require.NoError(s.T(), err)
+
+	ticket, err := store.Read("tic-pr-partial")
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), "ref-x", ticket.PR)
+}
+
+func (s *CmdSuite) TestPRCommandNotFound() {
+	_, err := s.executeCommand("pr", "nonexistent", "ref")
+	require.Error(s.T(), err)
+	require.Contains(s.T(), err.Error(), "not found")
+}
+
+func (s *CmdSuite) TestPRCommandJSON() {
+	s.createTestTicket("tic-prjson", tk.StatusOpen, "PR JSON Test")
+
+	output, err := s.executeCommand("pr", "--json", "tic-prjson", "gh-pr-99")
+
+	require.NoError(s.T(), err)
+	var t tk.Ticket
+	require.NoError(s.T(), json.Unmarshal([]byte(output), &t))
+	require.Equal(s.T(), "tic-prjson", t.ID)
+	require.Equal(s.T(), "gh-pr-99", t.PR)
 }
 
 func (s *CmdSuite) TestCreateWithTags() {

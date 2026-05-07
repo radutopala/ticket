@@ -149,6 +149,7 @@ type Ticket struct {
 	Assignee    string    `yaml:"assignee,omitempty"`
 	Parent      string    `yaml:"parent,omitempty"`
 	ExternalRef string    `yaml:"external-ref,omitempty"`
+	PR          string    `yaml:"pr,omitempty"`
 	Tags        []string  `yaml:"tags,omitempty"`
 	Deps        []string  `yaml:"deps,omitempty"`
 	Links       []string  `yaml:"links,omitempty"`
